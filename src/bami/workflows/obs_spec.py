@@ -12,7 +12,6 @@ from typing import Literal
 
 import numpy as np
 
-
 ObsKind = Literal["aggregate_summary", "proportions", "counts"]
 NTransform = Literal["log_range", "linear_range"]
 

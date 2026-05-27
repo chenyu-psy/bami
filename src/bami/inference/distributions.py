@@ -13,7 +13,6 @@ from collections.abc import Mapping
 import numpy as np
 from scipy.special import gammaln, i0e, logsumexp
 
-
 LOG_2PI = float(np.log(2.0 * np.pi))
 
 
@@ -107,8 +106,8 @@ class Binomial:
                 k_arr = x_arr
         else:
             k_arr = np.asarray(k, dtype=float)
-        log_const = gammaln(n_arr + 1.0) - gammaln(k_arr + 1.0) - gammaln(
-            n_arr - k_arr + 1.0
+        log_const = (
+            gammaln(n_arr + 1.0) - gammaln(k_arr + 1.0) - gammaln(n_arr - k_arr + 1.0)
         )
         return log_const + k_arr * np.log(p_arr) + (n_arr - k_arr) * np.log1p(-p_arr)
 
@@ -343,7 +342,9 @@ class Mixture:
         if weights_arr.ndim != 1 or np.any(weights_arr < 0) or np.sum(weights_arr) <= 0:
             raise ValueError("Mixture weights must be one-dimensional and nonnegative.")
         if len(weights_arr) != len(components):
-            raise ValueError("Mixture weights and components must have the same length.")
+            raise ValueError(
+                "Mixture weights and components must have the same length."
+            )
         self.weights = weights_arr / np.sum(weights_arr)
         self.components = list(components)
 

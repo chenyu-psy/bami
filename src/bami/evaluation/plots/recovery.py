@@ -40,7 +40,6 @@ def _compute_pearson_r(truth: np.ndarray, estimate: np.ndarray) -> float:
     return float(np.corrcoef(x, y)[0, 1])
 
 
-
 def _select_plot_pars(df: pd.DataFrame, pars: list[str] | None) -> list[str]:
     """Select parameter names to include in a recovery figure.
 
@@ -69,10 +68,11 @@ def _select_plot_pars(df: pd.DataFrame, pars: list[str] | None) -> list[str]:
 
     missing_pars = [par for par in pars if par not in available_pars]
     if missing_pars:
-        raise ValueError(f"Requested parameters not found in recovery table: {missing_pars}")
+        raise ValueError(
+            f"Requested parameters not found in recovery table: {missing_pars}"
+        )
 
     return pars
-
 
 
 def _plot_recovery_panel(
@@ -122,7 +122,6 @@ def _plot_recovery_panel(
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.grid(alpha=0.2)
-
 
 
 def _plot_recovery_grid(
@@ -205,7 +204,9 @@ def _plot_recovery_grid(
     return fig
 
 
-def _dataset_recovery_correlations(df: pd.DataFrame, pars: list[str] | None) -> pd.DataFrame:
+def _dataset_recovery_correlations(
+    df: pd.DataFrame, pars: list[str] | None
+) -> pd.DataFrame:
     """Compute one subject-level recovery correlation per dataset and parameter.
 
     Parameters
@@ -250,7 +251,9 @@ def _dataset_recovery_correlations(df: pd.DataFrame, pars: list[str] | None) -> 
 
     out = pd.DataFrame(rows)
     if out.empty:
-        raise ValueError("No finite simulation-level individual recovery correlations found.")
+        raise ValueError(
+            "No finite simulation-level individual recovery correlations found."
+        )
     return out
 
 
@@ -279,7 +282,9 @@ def _low_ess_note(df: pd.DataFrame) -> str | None:
     return f"low ESS rows: {100 * low_rate:.1f}%"
 
 
-def _trial_recovery_correlations(df: pd.DataFrame, pars: list[str] | None) -> pd.DataFrame:
+def _trial_recovery_correlations(
+    df: pd.DataFrame, pars: list[str] | None
+) -> pd.DataFrame:
     """Compute recovery correlations for each trial count and parameter.
 
     Parameters
@@ -333,7 +338,6 @@ def _trial_recovery_correlations(df: pd.DataFrame, pars: list[str] | None) -> pd
     return out
 
 
-
 def plot_population_recovery(
     df: pd.DataFrame,
     pars: list[str] | None = None,
@@ -377,7 +381,6 @@ def plot_population_recovery(
         point_alpha=point_alpha,
         point_size=point_size,
     )
-
 
 
 def plot_individual_recovery(
@@ -536,7 +539,9 @@ def plot_trial_sensitivity_recovery(
         color = colors[i % len(colors)]
         param_df = corr_df[corr_df["param"] == param]
         data_by_trial = [
-            param_df.loc[param_df["trial_count"] == trial_count, "r"].to_numpy(dtype=float)
+            param_df.loc[param_df["trial_count"] == trial_count, "r"].to_numpy(
+                dtype=float
+            )
             for trial_count in trial_counts
         ]
 

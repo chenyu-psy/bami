@@ -16,7 +16,6 @@ from bami.evaluation.plots import (
 matplotlib.use("Agg")
 
 
-
 def test_recovery_plots_run_with_minimal_input():
     """Population and individual recovery plotting should return figure objects."""
 
@@ -40,7 +39,6 @@ def test_recovery_plots_run_with_minimal_input():
     assert ind_fig.axes[0].get_title() == "Individual Recovery by Simulation"
 
 
-
 def test_population_recovery_respects_pars_order():
     """Population recovery should plot only requested parameters in the given order."""
 
@@ -59,7 +57,6 @@ def test_population_recovery_respects_pars_order():
     assert titles == ["tau_mu (r=nan)", "a_mu (r=nan)"]
 
 
-
 def test_population_recovery_raises_for_missing_pars():
     """Population recovery should fail clearly when requested parameters are absent."""
 
@@ -76,16 +73,41 @@ def test_population_recovery_raises_for_missing_pars():
         plot_population_recovery(recovery_df, pars=["a_mu", "missing_param"])
 
 
-
 def test_individual_recovery_respects_pars_order():
     """Individual recovery should plot only requested parameters in the given order."""
 
     recovery_df = pd.DataFrame(
         {
             "level": ["individual"] * 12,
-            "param": ["a", "a", "a", "a", "c", "c", "c", "c", "tau", "tau", "tau", "tau"],
+            "param": [
+                "a",
+                "a",
+                "a",
+                "a",
+                "c",
+                "c",
+                "c",
+                "c",
+                "tau",
+                "tau",
+                "tau",
+                "tau",
+            ],
             "true_value": [0.2, 0.4, 0.3, 0.5, 0.7, 0.9, 0.8, 1.0, 0.5, 0.7, 0.6, 0.8],
-            "est_value": [0.25, 0.45, 0.35, 0.55, 0.72, 0.92, 0.82, 1.02, 0.48, 0.68, 0.58, 0.78],
+            "est_value": [
+                0.25,
+                0.45,
+                0.35,
+                0.55,
+                0.72,
+                0.92,
+                0.82,
+                1.02,
+                0.48,
+                0.68,
+                0.58,
+                0.78,
+            ],
             "dataset_id": [0, 0, 1, 1] * 3,
             "subject_id": [0, 1, 0, 1] * 3,
         }
@@ -93,14 +115,17 @@ def test_individual_recovery_respects_pars_order():
 
     fig = plot_individual_recovery(recovery_df, pars=["tau", "a"])
     visible_axes = [ax for ax in fig.axes if ax.axison]
-    tick_labels = [tick.get_text().split("\n")[0] for tick in visible_axes[0].get_xticklabels()]
-    jitter_count = sum(len(collection.get_offsets()) for collection in visible_axes[0].collections)
+    tick_labels = [
+        tick.get_text().split("\n")[0] for tick in visible_axes[0].get_xticklabels()
+    ]
+    jitter_count = sum(
+        len(collection.get_offsets()) for collection in visible_axes[0].collections
+    )
 
     assert len(visible_axes) == 1
     assert tick_labels == ["tau", "a"]
     assert jitter_count == 4
     assert visible_axes[0].get_ylim() == (-0.05, 1.05)
-
 
 
 def test_individual_recovery_raises_for_missing_pars():
@@ -179,7 +204,6 @@ def test_trial_sensitivity_recovery_requires_trial_count():
 
     with pytest.raises(ValueError, match="trial_count"):
         plot_trial_sensitivity_recovery(recovery_df)
-
 
 
 def test_diagnostic_plots_run_with_minimal_input():

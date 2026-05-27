@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-
 REQUIRED_CONTRACT_FIELDS = (
     "name",
     "param_names",

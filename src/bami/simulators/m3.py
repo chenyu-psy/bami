@@ -11,7 +11,6 @@ from collections.abc import Sequence
 
 import numpy as np
 
-
 DEFAULT_M3_OPTIONS = (1, 3, 1, 3, 4)
 
 

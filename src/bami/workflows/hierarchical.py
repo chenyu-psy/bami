@@ -167,8 +167,7 @@ class MaskedEquivariantSetEncoder(keras.Layer):
             for _ in range(self.n_context_blocks)
         ]
         self.context_norms = [
-            keras.layers.LayerNormalization()
-            for _ in range(self.n_context_blocks)
+            keras.layers.LayerNormalization() for _ in range(self.n_context_blocks)
         ]
         self.post_layers = [
             keras.layers.Dense(
@@ -335,14 +334,16 @@ class MaskedEquivariantSetEncoder(keras.Layer):
 
         active_count = keras.ops.sum(mask, axis=-1, keepdims=True)
         padded_count = keras.ops.sum(keras.ops.ones_like(mask), axis=-1, keepdims=True)
-        active_count = keras.ops.maximum(active_count, keras.ops.ones_like(active_count))
-        padded_count = keras.ops.maximum(padded_count, keras.ops.ones_like(padded_count))
+        active_count = keras.ops.maximum(
+            active_count, keras.ops.ones_like(active_count)
+        )
+        padded_count = keras.ops.maximum(
+            padded_count, keras.ops.ones_like(padded_count)
+        )
         active_fraction = active_count / padded_count
         log_count_fraction = keras.ops.log(
             active_count + keras.ops.ones_like(active_count)
-        ) / keras.ops.log(
-            padded_count + keras.ops.ones_like(padded_count)
-        )
+        ) / keras.ops.log(padded_count + keras.ops.ones_like(padded_count))
         return keras.ops.concatenate(
             [summary, active_fraction, log_count_fraction],
             axis=-1,
@@ -1030,8 +1031,7 @@ class HierarchicalWorkflow:
             row_arr = np.asarray(row, dtype=np.float32)
             if row_arr.shape != (self.data_width,):
                 raise ValueError(
-                    "simulator must return a row with shape "
-                    f"({self.data_width},)."
+                    "simulator must return a row with shape " f"({self.data_width},)."
                 )
             if raw_data is not None:
                 raw_data[subject_id] = row_arr

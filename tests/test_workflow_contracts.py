@@ -6,7 +6,6 @@ import pytest
 
 from bami.workflows import validate_observation, validate_workflow_contract
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
