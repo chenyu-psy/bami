@@ -278,8 +278,10 @@ class PosthocSampler:
             if log_sigma_key(param_name) in group_samples:
                 sigma = np.exp(sigma)
             draw_idx = rng.integers(0, mu.shape[0], size=n_candidates)
-            sigma_idx = draw_idx if sigma.shape[0] == mu.shape[0] else rng.integers(
-                0, sigma.shape[0], size=n_candidates
+            sigma_idx = (
+                draw_idx
+                if sigma.shape[0] == mu.shape[0]
+                else rng.integers(0, sigma.shape[0], size=n_candidates)
             )
             raw_values = rng.normal(loc=mu[draw_idx], scale=sigma[sigma_idx])
             candidates[param_name] = np.asarray(
@@ -324,7 +326,9 @@ class PosthocSampler:
         else:
             arr = np.asarray(data, dtype=float)
         if arr.ndim != 3:
-            raise ValueError("data must have shape (n_datasets, n_subjects, n_features).")
+            raise ValueError(
+                "data must have shape (n_datasets, n_subjects, n_features)."
+            )
         if arr.shape[-1] < len(self.obs_names):
             raise ValueError("data has fewer columns than obs_names.")
 

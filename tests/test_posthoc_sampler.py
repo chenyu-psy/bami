@@ -6,7 +6,6 @@ from bami.inference.distributions import Binomial
 from bami.inference.posthoc import PosthocSampler
 from bami.workflows import HierarchicalWorkflow
 
-
 PRIORS = {
     "p": {"mean": "normal(0, 0.1)", "sd": 0.2, "link": "logit"},
 }

@@ -9,7 +9,6 @@ import re
 import numpy as np
 from scipy.stats import truncnorm
 
-
 MIN_POSITIVE_SCALE = 1e-8
 DIST_PATTERN = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)\s*$")
 POSITIVE_SD_DISTS = {"uniform", "exponential", "gamma", "beta"}

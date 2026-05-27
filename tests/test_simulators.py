@@ -8,7 +8,6 @@ from bami.simulators import (
     errors_to_ms_sdm_summary,
     ezdm_moments,
     m3_activation,
-    sdm_probs,
     simulate_ezdm_summary,
     simulate_m3_counts,
     simulate_ms_sdm_summary,

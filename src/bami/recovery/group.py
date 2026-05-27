@@ -271,8 +271,7 @@ def _flex_conditions_from_counts(
     data_width = int(getattr(flex_model, "data_width", 5))
     if data.ndim != 3 or data.shape[-1] != data_width:
         raise ValueError(
-            "count_data must have shape "
-            f"(n_datasets, n_subjects, {data_width})."
+            "count_data must have shape " f"(n_datasets, n_subjects, {data_width})."
         )
 
     flex_batches = []

@@ -9,7 +9,6 @@ from bami.evaluation.contracts import (
 )
 
 
-
 def test_validate_recovery_contract_accepts_minimum_schema():
     """Recovery validator should accept required columns and valid levels."""
 
@@ -22,7 +21,6 @@ def test_validate_recovery_contract_accepts_minimum_schema():
         }
     )
     validate_recovery_contract(df)
-
 
 
 def test_validate_recovery_contract_rejects_invalid_level():
@@ -38,7 +36,6 @@ def test_validate_recovery_contract_rejects_invalid_level():
     )
     with pytest.raises(ValueError, match="unsupported level"):
         validate_recovery_contract(df)
-
 
 
 def test_validate_diagnostic_contract_requires_metric_columns():

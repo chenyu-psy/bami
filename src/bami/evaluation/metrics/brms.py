@@ -31,7 +31,6 @@ def brms_pop_recovery(*args, **kwargs) -> pd.DataFrame:
     raise NotImplementedError("BRMS population recovery is not implemented yet.")
 
 
-
 def brms_ind_recovery(*args, **kwargs) -> pd.DataFrame:
     """Return brms individual recovery in the shared long-format contract.
 
@@ -52,7 +51,6 @@ def brms_ind_recovery(*args, **kwargs) -> pd.DataFrame:
     """
 
     raise NotImplementedError("BRMS individual recovery is not implemented yet.")
-
 
 
 def brms_calibration(*args, **kwargs) -> pd.DataFrame:
@@ -77,7 +75,6 @@ def brms_calibration(*args, **kwargs) -> pd.DataFrame:
     raise NotImplementedError("BRMS calibration diagnostics are not implemented yet.")
 
 
-
 def brms_coverage(*args, **kwargs) -> pd.DataFrame:
     """Return brms coverage metric table in the shared diagnostic format.
 
@@ -98,7 +95,6 @@ def brms_coverage(*args, **kwargs) -> pd.DataFrame:
     """
 
     raise NotImplementedError("BRMS coverage diagnostics are not implemented yet.")
-
 
 
 def brms_zscore(*args, **kwargs) -> pd.DataFrame:

@@ -22,7 +22,6 @@ from bami.inference.priors import (
     mu_raw_key,
 )
 
-
 RESPONSE_COLUMNS = ["correct", "other", "dist", "other_dist", "new"]
 BASE_PARAMS = ["a", "c", "ra", "rc"]
 

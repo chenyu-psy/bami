@@ -12,7 +12,6 @@ import pandas as pd
 from bami.evaluation.contracts import validate_diagnostic_contract
 
 
-
 def _plot_metric_bars(
     df: pd.DataFrame,
     metric: str,
@@ -54,7 +53,6 @@ def _plot_metric_bars(
     return fig
 
 
-
 def plot_calibration_ecdf(df: pd.DataFrame) -> plt.Figure:
     """Plot calibration quality (Log Gamma) by parameter.
 
@@ -77,7 +75,6 @@ def plot_calibration_ecdf(df: pd.DataFrame) -> plt.Figure:
     )
 
 
-
 def plot_coverage(df: pd.DataFrame) -> plt.Figure:
     """Plot coverage error by parameter.
 
@@ -98,7 +95,6 @@ def plot_coverage(df: pd.DataFrame) -> plt.Figure:
         title="Coverage (Calibration Error)",
         ylabel="Calibration Error",
     )
-
 
 
 def plot_zscore_contraction(df: pd.DataFrame) -> plt.Figure:

@@ -28,7 +28,6 @@ VALID_LEVELS: tuple[str, ...] = ("population", "individual")
 REQUIRED_DIAGNOSTIC_COLUMNS: tuple[str, ...] = ("param", "metric", "value")
 
 
-
 def _missing_columns(df: pd.DataFrame, required: Iterable[str]) -> list[str]:
     """Return missing columns from a DataFrame.
 
@@ -46,7 +45,6 @@ def _missing_columns(df: pd.DataFrame, required: Iterable[str]) -> list[str]:
     """
 
     return [col for col in required if col not in df.columns]
-
 
 
 def validate_recovery_contract(df: pd.DataFrame) -> None:
@@ -75,7 +73,6 @@ def validate_recovery_contract(df: pd.DataFrame) -> None:
             "Recovery table has unsupported level values: "
             f"{invalid_levels}. Allowed: {list(VALID_LEVELS)}"
         )
-
 
 
 def validate_diagnostic_contract(df: pd.DataFrame) -> None:

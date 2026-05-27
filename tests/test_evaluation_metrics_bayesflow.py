@@ -33,7 +33,6 @@ from bami.inference.priors import (
 from bami.simulators.m3 import normalize_m3_count_row, simulate_m3_counts
 from bami.workflows import HierarchicalWorkflow
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

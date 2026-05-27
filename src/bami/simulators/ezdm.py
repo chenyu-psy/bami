@@ -13,7 +13,6 @@ from collections.abc import Mapping
 import numpy as np
 import pandas as pd
 
-
 GROUP_PARAM_NAMES = ["mu_v", "sd_v", "mu_a", "sd_a", "mu_t0", "sd_t0"]
 SIMPLE_COLUMNS = ["n_trials", "pc", "mrt", "vrt", "v", "a", "t0"]
 HIERARCHICAL_COLUMNS = [

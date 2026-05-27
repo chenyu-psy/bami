@@ -39,9 +39,9 @@ def errors_to_ms_sdm_summary(
 
     moments = circular_moments_from_errors(errors_deg, error_scale=error_scale)
     n_trials = np.asarray(errors_deg).reshape(-1).size
-    return np.concatenate(
-        [moments, np.array([n_trials], dtype=np.float32)]
-    ).astype(np.float32)
+    return np.concatenate([moments, np.array([n_trials], dtype=np.float32)]).astype(
+        np.float32
+    )
 
 
 def simulate_ms_sdm_summary(

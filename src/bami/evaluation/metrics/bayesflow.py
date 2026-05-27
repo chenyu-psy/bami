@@ -21,7 +21,6 @@ from bami.evaluation.contracts import (
     validate_recovery_contract,
 )
 
-
 _M3_POSTHOC_WORKER_STATE: dict[str, object] = {}
 
 
