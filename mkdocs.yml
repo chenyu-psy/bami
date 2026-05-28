@@ -1,0 +1,71 @@
+site_name: bami
+site_description: Bayesian amortized model inference workflows for cognitive models.
+repo_url: https://github.com/chenyu-psy/bami
+
+theme:
+  name: material
+  palette:
+    primary: white
+    accent: blue
+  features:
+    - navigation.sections
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.instant
+    - content.code.copy
+
+extra_css:
+  - stylesheets/extra.css
+
+nav:
+  - Introduction: index.md
+  - API Reference:
+      - Package index: api/index.md
+      - Workflows:
+          - SimpleWorkflow: api/workflows/simple.md
+          - HierarchicalWorkflow: api/workflows/hierarchical.md
+      - Inputs:
+          - Input formats: api/inputs/formats.md
+      - Simulators:
+          - SDM and circular helpers: api/simulators/sdm-circular.md
+          - ezDM: api/simulators/ezdm.md
+          - M3: api/simulators/m3.md
+      - Training:
+          - fit_workflow: api/training/fit-workflow.md
+      - Evaluation:
+          - Metrics: api/evaluation/metrics.md
+          - Plots and table contracts: api/evaluation/plots-contracts.md
+      - Recovery:
+          - Recovery workflows: api/recovery.md
+      - Advanced inference:
+          - Prior utilities: api/inference/priors-transforms.md
+          - Likelihood distributions: api/inference/distributions.md
+          - Checkpoints and runtime: api/inference/checkpoints-runtime.md
+  - Examples:
+      - Simple SDM workflow: examples/simple-sdm.md
+      - Hierarchical ezDM workflow: examples/hierarchical-ezdm.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - toc:
+      permalink: true
+      toc_depth: 2
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - src
+          options:
+            docstring_style: numpy
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            members_order: source
