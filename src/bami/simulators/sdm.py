@@ -1,7 +1,6 @@
 """Trial-level SDM simulation helpers.
 
 The standard SDM represents observations as trial-level signed circular errors.
-msSDM moment summaries live in a separate module.
 """
 
 from __future__ import annotations
@@ -81,7 +80,7 @@ def sdm_probs(c: float, kappa: float, grid_size: int = GRID_SIZE) -> np.ndarray:
     return np.exp(sdm_log_probs(c=c, kappa=kappa, grid_size=grid_size))
 
 
-def simulate_sdm_errors(
+def simulate_sdm_simple(
     c: float,
     kappa: float,
     n_trials: int = 100,

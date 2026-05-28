@@ -10,9 +10,9 @@ from bami.simulators.circular import (
     indices_to_errors,
 )
 from bami.simulators.sdm import (
-    simulate_sdm_errors,
+    simulate_sdm_simple,
 )
-from bami.recovery import train_model
+from bami.training import fit_workflow
 from bami.workflows import (
     HierarchicalWorkflow,
     SimpleWorkflow,
@@ -27,7 +27,7 @@ def test_sdm_fixed_trial_workflow_outputs_trial_rows():
         name=SDM_SPEC["model_name"],
         param_names=["c", "kappa"],
         priors=SDM_SPEC["priors"],
-        simulator=simulate_sdm_errors,
+        simulator=simulate_sdm_simple,
         observation="trial",
         simulator_kwargs={"grid_size": GRID_SIZE, "error_scale": 180.0},
         obs_names=SDM_SPEC["trial_contract"]["order"],
@@ -51,7 +51,7 @@ def test_sdm_flex_trial_workflow_pads_with_active_mask():
         name=SDM_SPEC["model_name"],
         param_names=["c", "kappa"],
         priors=SDM_SPEC["priors"],
-        simulator=simulate_sdm_errors,
+        simulator=simulate_sdm_simple,
         observation="trial",
         simulator_kwargs={"grid_size": GRID_SIZE, "error_scale": 180.0},
         obs_names=SDM_SPEC["trial_contract"]["order"],
@@ -80,7 +80,7 @@ def test_sdm_fixed_hierarchy_outputs_nested_continuous_errors():
     model = HierarchicalWorkflow(
         name=SDM_SPEC["model_name"],
         priors=SDM_SPEC["priors"],
-        simulator=simulate_sdm_errors,
+        simulator=simulate_sdm_simple,
         observation="trial",
         simulator_kwargs={"grid_size": GRID_SIZE, "error_scale": 180.0},
         obs_names=SDM_SPEC["trial_contract"]["order"],
@@ -108,7 +108,7 @@ def test_sdm_flex_hierarchy_pads_nested_continuous_errors():
     model = HierarchicalWorkflow(
         name=SDM_SPEC["model_name"],
         priors=SDM_SPEC["priors"],
-        simulator=simulate_sdm_errors,
+        simulator=simulate_sdm_simple,
         observation="trial",
         simulator_kwargs={"grid_size": GRID_SIZE, "error_scale": 180.0},
         obs_names=SDM_SPEC["trial_contract"]["order"],
@@ -140,7 +140,7 @@ def test_sdm_fixed_hierarchy_tiny_training_accepts_stage_metrics():
     model = HierarchicalWorkflow(
         name=SDM_SPEC["model_name"],
         priors=SDM_SPEC["priors"],
-        simulator=simulate_sdm_errors,
+        simulator=simulate_sdm_simple,
         observation="trial",
         simulator_kwargs={"grid_size": GRID_SIZE, "error_scale": 180.0},
         obs_names=SDM_SPEC["trial_contract"]["order"],
@@ -151,7 +151,7 @@ def test_sdm_fixed_hierarchy_tiny_training_accepts_stage_metrics():
         transform_samples=transform_hierarchical_samples,
     )
 
-    history = train_model(
+    history = fit_workflow(
         model,
         max_epochs=1,
         initial_epochs=1,

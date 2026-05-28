@@ -3,11 +3,11 @@
 import numpy as np
 import pandas as pd
 
-from fixtures_model_specs import M3_SPEC
+from fixtures_model_specs import M3_SPEC, m3_activation
 from bami.inference import transform_hierarchical_samples
 from bami.inference.posthoc import M3PosthocEstimator
 from bami.inference.priors import log_sigma_key, mu_raw_key
-from bami.simulators.m3 import normalize_m3_count_row, simulate_m3_counts
+from bami.simulators.m3 import prop_m3, simulate_m3_custom
 from bami.workflows import HierarchicalWorkflow
 
 
@@ -36,13 +36,17 @@ def _build_small_model(
     """
 
     priors = M3_SPEC["priors"] if priors is None else priors
-    row_transform = normalize_m3_count_row if normalize_counts else None
+    row_transform = prop_m3 if normalize_counts else None
     return HierarchicalWorkflow(
         name=M3_SPEC["model_name"],
         priors=priors,
-        simulator=simulate_m3_counts,
+        simulator=simulate_m3_custom,
         observation="aggregate",
-        simulator_kwargs={"n_options": M3_SPEC["n_options"], "rule": M3_SPEC["rule"]},
+        simulator_kwargs={
+            "activation_fn": m3_activation,
+            "n_options": M3_SPEC["n_options"],
+            "rule": M3_SPEC["rule"],
+        },
         data_width=len(M3_SPEC["activation_contract"]["order"]),
         n_subjects_range=n_subjects_range,
         n_trials_range=n_trials_range,

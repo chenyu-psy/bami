@@ -1,6 +1,5 @@
 """Shared circular-error helpers for SDM-family simulators.
 
-This module contains model-neutral circular utilities used by SDM and msSDM.
 The helpers keep degree conventions in one place so each model module can
 focus on its own observation format.
 """

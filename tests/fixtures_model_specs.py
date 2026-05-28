@@ -22,6 +22,30 @@ M3_SPEC = {
     },
 }
 
+
+def m3_activation(a, c, ra, rc, b=0):
+    """Return standard M3 activation scores for test workflows.
+
+    Parameters
+    ----------
+    a, c, ra, rc, b
+        Public-scale M3 parameters.
+
+    Returns
+    -------
+    list[float]
+        Activation scores in ``correct``, ``other``, ``dist``, ``other_dist``,
+        and ``new`` order.
+    """
+
+    return [
+        a + c + b,
+        a + b,
+        ra * a + rc * c + b,
+        ra * a + b,
+        b,
+    ]
+
 EZDM_SPEC = {
     "model_name": "ezDM",
     "priors": {

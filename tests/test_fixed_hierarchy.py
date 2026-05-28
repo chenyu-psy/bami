@@ -1,9 +1,9 @@
 """Tests for the fixed-design hierarchy model."""
 
-from fixtures_model_specs import M3_SPEC
+from fixtures_model_specs import M3_SPEC, m3_activation
 from bami.inference import transform_hierarchical_samples
 from bami.inference.posthoc import M3PosthocEstimator
-from bami.simulators.m3 import simulate_m3_counts
+from bami.simulators.m3 import simulate_m3_custom
 from bami.workflows import HierarchicalWorkflow
 
 
@@ -24,9 +24,13 @@ def _build_fixed_hierarchy(**kwargs) -> HierarchicalWorkflow:
     return HierarchicalWorkflow(
         name=M3_SPEC["model_name"],
         priors=M3_SPEC["priors"],
-        simulator=simulate_m3_counts,
+        simulator=simulate_m3_custom,
         observation="aggregate",
-        simulator_kwargs={"n_options": M3_SPEC["n_options"], "rule": M3_SPEC["rule"]},
+        simulator_kwargs={
+            "activation_fn": m3_activation,
+            "n_options": M3_SPEC["n_options"],
+            "rule": M3_SPEC["rule"],
+        },
         data_width=len(M3_SPEC["activation_contract"]["order"]),
         keep_subject_truth=["a", "c", "ra", "rc"],
         transform_samples=transform_hierarchical_samples,

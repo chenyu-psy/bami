@@ -3,12 +3,13 @@
 import numpy as np
 
 from fixtures_model_specs import EZDM_SPEC
+from bami.inputs import aggregate_summary
 from bami.inference.priors import (
     mu_raw_key,
     transform_hierarchical_samples,
 )
-from bami.simulators.ezdm import simulate_ezdm_summary
-from bami.workflows import HierarchicalWorkflow, ObsSpec
+from bami.simulators.ezdm import simulate_ezdm_simple
+from bami.workflows import HierarchicalWorkflow
 
 
 def _build_ezdm_hierarchy(**design_kwargs) -> HierarchicalWorkflow:
@@ -29,7 +30,7 @@ def _build_ezdm_hierarchy(**design_kwargs) -> HierarchicalWorkflow:
     return HierarchicalWorkflow(
         name=EZDM_SPEC["model_name"],
         priors=EZDM_SPEC["priors"],
-        simulator=simulate_ezdm_summary,
+        simulator=simulate_ezdm_simple,
         observation="aggregate",
         simulator_kwargs={"s": EZDM_SPEC["scaling"]},
         data_width=len(EZDM_SPEC["summary_contract"]["order"]),
@@ -53,14 +54,14 @@ def test_ezdm_fixed_hierarchy_simulates_subject_summary_rows():
     assert model.workflow.workflow_family == "fixed_hierarchical"
 
 
-def test_ezdm_flex_hierarchy_uses_obs_spec_n_feature_and_mask():
+def test_ezdm_flex_hierarchy_uses_input_format_n_feature_and_mask():
     """Flex ezDM hierarchy should append scaled trial count and active mask."""
 
     np.random.seed(2026)
     model = _build_ezdm_hierarchy(
         n_subjects_range=(2, 5),
         n_trials_range=(10, 15),
-        obs_spec=ObsSpec.aggregate_summary(n_range=(10, 14)),
+        input_format=aggregate_summary(n_range=(10, 14)),
     )
     sim = model.workflow.simulate(6)
     n_subjects = sim["n_subjects"].reshape(-1)
