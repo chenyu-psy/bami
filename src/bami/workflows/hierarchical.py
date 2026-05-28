@@ -14,6 +14,7 @@ import bayesflow as bf
 import keras
 
 from bami.inputs import InputFormat
+from bami.workflows import training
 from bami.workflows.contracts import validate_observation
 from bami.workflows.simple import SimpleWorkflow
 
@@ -1344,9 +1345,15 @@ class HierarchicalWorkflow:
         validation_data=200,
         patience=5,
         min_delta=0.1,
+        workers=4,
+        max_queue_size=16,
+        torch_device=None,
+        verbose=1,
+        file=None,
+        overwrite=False,
         **kwargs,
     ):
-        """Train the workflow with reusable validation data.
+        """Train the workflow with optional saved-workflow handling.
 
         Parameters
         ----------
@@ -1358,18 +1365,32 @@ class HierarchicalWorkflow:
             Integer validation-set size or a pre-simulated validation dict.
         patience, min_delta
             Early-stopping controls based on validation loss.
+        workers
+            Number of Keras data-loading workers for online simulation batches.
+        max_queue_size
+            Maximum queue length for prefetched simulation batches.
+        torch_device
+            Torch default device to use during training, such as ``"mps"`` or
+            ``"cpu"``. Unavailable accelerators fall back to CPU.
+        verbose
+            Training log verbosity level passed to Keras.
+        file
+            Optional saved workflow file. When supplied, existing weights are
+            loaded by default and new weights are saved after fitting.
+        overwrite
+            Whether to refit and overwrite ``file`` when the saved workflow
+            file already exists.
         **kwargs
             Additional keyword arguments passed to ``workflow.fit_online``.
 
         Returns
         -------
-        object
-            BayesFlow training history.
+        object or dict
+            BayesFlow training history, or ``{"loaded": True, "file": path}``
+            when an existing saved workflow file is reused.
         """
 
-        # The training loop is shared with SimpleWorkflow so notebook behavior
-        # stays the same across simple and hierarchical workflows.
-        return SimpleWorkflow.train_workflow(
+        return training.train_workflow(
             self,
             max_epochs=max_epochs,
             initial_epochs=initial_epochs,
@@ -1378,6 +1399,12 @@ class HierarchicalWorkflow:
             validation_data=validation_data,
             patience=patience,
             min_delta=min_delta,
+            workers=workers,
+            max_queue_size=max_queue_size,
+            torch_device=torch_device,
+            verbose=verbose,
+            file=file,
+            overwrite=overwrite,
             **kwargs,
         )
 

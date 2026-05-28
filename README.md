@@ -173,11 +173,8 @@ from 50 to 200.
 and circular-response summary utilities.
 
 `bami.inference`
-: Prior drawing, parameter transforms, checkpoint helpers, runtime settings, and
-posthoc subject-level sampling.
-
-`bami.training`
-: Workflow fitting with shared checkpoint behavior.
+: Prior drawing, parameter transforms, saved-workflow helpers, runtime settings,
+and posthoc subject-level sampling.
 
 `bami.recovery`
 : Recovery workflows for comparing true and estimated parameters.
@@ -188,16 +185,12 @@ posthoc subject-level sampling.
 `bami.data_ops` and `bami.data_shapes`
 : Small utilities for tabular data handling, validation, and padding.
 
-## Training and checkpoints
+## Training and saved workflows
 
-After building a workflow, train through the model object or use the shared
-training helper:
+After building a workflow, train through the model object:
 
 ```python
-from bami.training import fit_workflow
-
-history = fit_workflow(
-    model,
+history = model.train_workflow(
     max_epochs=100,
     initial_epochs=20,
     n_batch=200,
@@ -205,12 +198,12 @@ history = fit_workflow(
     validation_data=64,
     patience=10,
     min_delta=0.001,
-    file="checkpoints/sdm_workflow.keras",
+    file="saved_workflows/sdm_workflow.keras",
 )
 ```
 
-If the checkpoint file already exists, `fit_workflow()` loads it by default
-instead of retraining. Use `overwrite=True` to force a new fit.
+If the saved workflow file already exists, `train_workflow()` loads it by
+default instead of retraining. Use `overwrite=True` to force a new fit.
 
 ## Evaluation workflow
 

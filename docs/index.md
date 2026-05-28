@@ -133,7 +133,7 @@ The upper bound is exclusive, so this example draws 50 to 200 trials.
 - `bami.workflows`: `SimpleWorkflow` and `HierarchicalWorkflow`.
 - `bami.inputs`: input-format helpers for aggregate rows that encode trial count.
 - `bami.simulators`: reusable simulator helpers for SDM, ezDM, M3, and circular data.
-- `bami.inference`: priors, transforms, checkpoints, runtime settings, and posterior helpers.
+- `bami.inference`: priors, transforms, saved workflows, runtime settings, and posterior helpers.
 - `bami.recovery`: training and recovery-analysis helpers.
 - `bami.evaluation`: metric tables, validation contracts, and diagnostic plots.
 

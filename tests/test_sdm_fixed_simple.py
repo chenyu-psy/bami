@@ -6,7 +6,6 @@ from bami.inference import transform_hierarchical_samples
 from bami.simulators.sdm import (
     simulate_sdm_simple,
 )
-from bami.training import fit_workflow
 from bami.workflows import (
     HierarchicalWorkflow,
     SimpleWorkflow,
@@ -140,8 +139,7 @@ def test_sdm_fixed_hierarchy_tiny_training_accepts_stage_metrics():
         transform_samples=transform_hierarchical_samples,
     )
 
-    history = fit_workflow(
-        model,
+    history = model.train_workflow(
         max_epochs=1,
         initial_epochs=1,
         n_batch=1,

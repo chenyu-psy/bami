@@ -10,19 +10,6 @@ Start here when building a BayesFlow workflow around a simulator.
 [`SimpleWorkflow` and `HierarchicalWorkflow`](workflows.md)
 : Build non-hierarchical or group-level workflows around a simulator.
 
-## Inputs
-
-Use these functions when workflow input rows need explicit trial-count encoding.
-
-[`aggregate_summary`](inputs/formats.md)
-: Preserve aggregate summary features and append encoded `n_trials`.
-
-[`proportions`](inputs/formats.md)
-: Preserve proportion features and append encoded `n_trials`.
-
-[`counts`](inputs/formats.md)
-: Preserve count rows and optionally append encoded `n_trials`.
-
 ## Simulators
 
 Use these functions to simulate cognitive-model summaries or trial rows for
@@ -36,14 +23,6 @@ workflows. Model-specific helpers are documented on each simulator page.
 
 [`simulate_m3_custom`](simulators/m3.md)
 : Simulate response-count vectors for M3 workflows.
-
-## Training
-
-Use this function when a configured workflow should be fitted with shared
-training settings and optional checkpoint loading or saving.
-
-[`fit_workflow`](training/fit-workflow.md)
-: Fit a workflow and optionally reuse or save a `.keras` checkpoint.
 
 ## Parameters
 
@@ -103,3 +82,35 @@ Use these functions for group-generated recovery checks.
 
 [`summarize`](recovery.md)
 : Summarize recovery rows into tables and figures.
+
+## Advanced
+
+These pages are useful when a workflow needs custom input encoding, lower-level
+inference utilities, or saved-workflow and runtime details.
+
+### Input
+
+Use these functions when workflow input rows need explicit trial-count encoding.
+
+[`aggregate_summary`](inputs/formats.md)
+: Preserve aggregate summary features and append encoded `n_trials`.
+
+[`proportions`](inputs/formats.md)
+: Preserve proportion features and append encoded `n_trials`.
+
+[`counts`](inputs/formats.md)
+: Preserve count rows and optionally append encoded `n_trials`.
+
+### Inference
+
+Use these helpers when you need prior/link utilities, likelihood building
+blocks, or saved-workflow and runtime controls.
+
+[`Prior utilities`](inference/priors-transforms.md)
+: Define priors and transform parameters between raw and public scales.
+
+[`Likelihood distributions`](inference/distributions.md)
+: Use distribution helpers for likelihood-oriented workflows.
+
+[`Saved workflows and runtime`](inference/checkpoints-runtime.md)
+: Load, save, and inspect fitted workflow runtime details.

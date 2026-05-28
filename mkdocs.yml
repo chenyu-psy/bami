@@ -23,14 +23,10 @@ nav:
       - Package index: api/index.md
       - Workflows:
           - Workflow classes: api/workflows.md
-      - Inputs:
-          - Input formats: api/inputs/formats.md
       - Simulators:
           - SDM: api/simulators/sdm-circular.md
           - ezDM: api/simulators/ezdm.md
           - M3: api/simulators/m3.md
-      - Training:
-          - fit_workflow: api/training/fit-workflow.md
       - Parameters:
           - Population and individual parameters: api/parameters.md
       - Evaluation:
@@ -38,10 +34,13 @@ nav:
           - Plots and table contracts: api/evaluation/plots-contracts.md
       - Recovery:
           - Recovery workflows: api/recovery.md
-      - Inference:
-          - Prior utilities: api/inference/priors-transforms.md
-          - Likelihood distributions: api/inference/distributions.md
-          - Checkpoints and runtime: api/inference/checkpoints-runtime.md
+      - Advanced:
+          - Input:
+              - Input formats: api/inputs/formats.md
+          - Inference:
+              - Prior utilities: api/inference/priors-transforms.md
+              - Likelihood distributions: api/inference/distributions.md
+              - Saved workflows and runtime: api/inference/checkpoints-runtime.md
   - Examples:
       - Simple SDM workflow: examples/simple-sdm.md
       - Hierarchical ezDM workflow: examples/hierarchical-ezdm.md

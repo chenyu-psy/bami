@@ -1,8 +1,8 @@
-# Advanced checkpoints and runtime
+# Advanced saved workflows and runtime
 
-These helpers are mainly for long-running scripts that need explicit checkpoint
-files or device selection. Most examples call workflow methods directly and do
-not need these functions.
+These helpers are mainly for long-running scripts that need explicit saved
+workflow files or device selection. Most examples call workflow methods
+directly and do not need these functions.
 
 ## Checkpoints
 
@@ -40,7 +40,7 @@ from bami.inference.runtime import configure_torch_device
 device = configure_torch_device("cpu")
 
 # `model` is a configured and trained SimpleWorkflow or HierarchicalWorkflow.
-checkpoint = save_workflow_weights(model, "checkpoints/sdm.keras")
-model = load_workflow_weights(model, checkpoint)
-model = load_model(model, checkpoint)
+saved_file = save_workflow_weights(model, "saved_workflows/sdm.keras")
+model = load_workflow_weights(model, saved_file)
+model = load_model(model, saved_file)
 ```

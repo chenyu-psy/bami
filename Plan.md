@@ -146,6 +146,28 @@ code review and website polish milestone is complete.
 
 ## Completed Work
 
+### Advanced Docs and Unified Training API
+
+Completed.
+
+- Moved input-format and inference details under `API Reference > Advanced` so
+  standard workflow pages stay easier to scan before advanced internals.
+- Removed the separate public `fit_workflow()` helper and made
+  `model.train_workflow(...)` the only user-facing training entry point.
+- Moved shared training behavior into internal workflow helpers so
+  `SimpleWorkflow` and `HierarchicalWorkflow` both delegate to the same saved
+  workflow, device-selection, and training-loop implementation.
+- Updated examples and docs to use researcher-facing saved workflow language
+  such as `saved_workflows/...` instead of checkpoint-oriented examples.
+- Renamed the saved-workflow tests around `train_workflow()` behavior and
+  updated tiny SDM training tests to use the workflow method directly.
+- `uv run pytest tests/test_train_workflow_saved_workflow.py` passed.
+- `uv run pytest tests/test_sdm_fixed_simple.py` passed.
+- `uv run mkdocs build` passed with the upstream Material for MkDocs 2.0
+  warning only.
+- Full `uv run pytest` passed with the existing Keras/Torch NumPy deprecation
+  warnings only.
+
 ### Workflow and Simulator Website Polish
 
 Completed.

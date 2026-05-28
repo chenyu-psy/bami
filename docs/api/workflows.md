@@ -215,13 +215,19 @@ After constructing a workflow object, the usual actions are:
 
 ```python
 sim = model.workflow.simulate(4)
-history = model.train_workflow(max_epochs=50, ...)
+history = model.train_workflow(
+    max_epochs=50,
+    validation_data=64,
+    file="saved_workflows/my_workflow.keras",
+    ...
+)
 posterior = model.convert_posterior(raw_samples)
 ```
 
 `model.workflow.simulate(...)` is the BayesFlow workflow method created by
-`bami`. The `train_workflow(...)` and `convert_posterior(...)` methods live on
-the `bami` workflow object.
+`bami`. The `train_workflow(...)` method fits the workflow and can load or save
+a trained workflow file. The `convert_posterior(...)` method transforms raw
+posterior samples to user-facing parameter names and scales.
 
 ::: bami.workflows.simple.SimpleWorkflow.train_workflow
     options:
