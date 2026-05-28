@@ -2,7 +2,9 @@
 
 The package is organized by responsibility:
 - workflows: model-agnostic BayesFlow workflow builders
+- inputs: input-format helpers for workflow data rows
 - simulators: preset model-family simulator functions
+- training: workflow fitting with shared checkpoint behavior
 - inference: priors, transforms, checkpoints, runtime, and posthoc helpers
 - recovery: parameter-recovery analysis helpers
 - evaluation: reusable plotting and metric contracts for model assessment
@@ -12,7 +14,9 @@ The package is organized by responsibility:
 
 __all__ = [
     "workflows",
+    "inputs",
     "simulators",
+    "training",
     "inference",
     "recovery",
     "evaluation",

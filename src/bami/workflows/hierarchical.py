@@ -13,8 +13,8 @@ import numpy as np
 import bayesflow as bf
 import keras
 
+from bami.inputs import InputFormat
 from bami.workflows.contracts import validate_observation
-from bami.workflows.obs_spec import ObsSpec
 from bami.workflows.simple import SimpleWorkflow
 
 
@@ -548,8 +548,8 @@ class HierarchicalWorkflow:
         are appended.
     trial_feature_scale
         Optional divisor used when writing the trial-count feature.
-    obs_spec
-        Optional observation encoding contract. If supplied, it formats
+    input_format
+        Optional input-format helper. If supplied, it formats
         simulator rows and trial counts before padding and masking.
     posthoc_estimator
         Optional estimator class exposing ``estimate_subjects`` for posthoc
@@ -587,7 +587,7 @@ class HierarchicalWorkflow:
         raw_data_key: str | None = None,
         row_transform: Callable | None = None,
         trial_feature_scale: float | None = None,
-        obs_spec: ObsSpec | None = None,
+        input_format: InputFormat | None = None,
         posthoc_estimator: Callable | None = None,
         posthoc_kwargs: Mapping | None = None,
         posthoc_kind: str | None = None,
@@ -644,7 +644,7 @@ class HierarchicalWorkflow:
         self.raw_data_key = raw_data_key
         self.row_transform = row_transform
         self.trial_feature_scale = trial_feature_scale
-        self.obs_spec = SimpleWorkflow._check_obs_spec(obs_spec)
+        self.input_format = SimpleWorkflow._check_input_format(input_format)
         self.posthoc_estimator = posthoc_estimator
         self.posthoc_kwargs = dict(posthoc_kwargs or {})
         self.posthoc_kind = posthoc_kind
@@ -912,7 +912,7 @@ class HierarchicalWorkflow:
         """
 
         width = self._encoded_data_width()
-        if self.obs_spec is None and self.include_trial_feature:
+        if self.input_format is None and self.include_trial_feature:
             width += 1
         if self.include_mask:
             width += 1
@@ -939,12 +939,12 @@ class HierarchicalWorkflow:
         Returns
         -------
         int
-            Base simulator width or ``obs_spec`` output width.
+            Base simulator width or ``input_format`` output width.
         """
 
-        if self.obs_spec is None:
+        if self.input_format is None:
             return self.data_width
-        return self.obs_spec.output_width(self.data_width)
+        return self.input_format.output_width(self.data_width)
 
     def _format_trial_feature(self, n_trials: int) -> float:
         """Return the trial-count feature for one subject row.
@@ -1035,11 +1035,11 @@ class HierarchicalWorkflow:
                 )
             if raw_data is not None:
                 raw_data[subject_id] = row_arr
-            if self.obs_spec is not None:
-                row_arr = self.obs_spec.encode(row_arr, n_trials)
+            if self.input_format is not None:
+                row_arr = self.input_format.encode(row_arr, n_trials)
                 if row_arr.shape != (self._encoded_data_width(),):
                     raise ValueError(
-                        "obs_spec must return a row with shape "
+                        "input_format must return a row with shape "
                         f"({self._encoded_data_width()},)."
                     )
             elif self.row_transform is not None:
@@ -1057,7 +1057,7 @@ class HierarchicalWorkflow:
             encoded_width = self._encoded_data_width()
             data[subject_id, col : col + encoded_width] = row_arr
             col += encoded_width
-            if self.obs_spec is None and self.include_trial_feature:
+            if self.input_format is None and self.include_trial_feature:
                 data[subject_id, col] = self._format_trial_feature(n_trials)
                 col += 1
             if self.include_mask:
@@ -1188,8 +1188,8 @@ class HierarchicalWorkflow:
         self.workflow.indexed_subject_recovery_aligned = False
         self.workflow.subject_id_mode = "exchangeable"
         self.workflow.posthoc_kind = self.posthoc_kind
-        self.workflow.obs_spec = self.obs_spec
-        self.workflow.obs_spec_metadata = self._obs_spec_metadata()
+        self.workflow.input_format = self.input_format
+        self.workflow.input_format_metadata = self._input_format_metadata()
         self.workflow.obs_names = self._workflow_obs_names()
 
     def _workflow_obs_names(self) -> list[str]:
@@ -1262,12 +1262,12 @@ class HierarchicalWorkflow:
 
         arr = np.asarray(counts, dtype=np.float32)
         subject_ids = list(range(arr.shape[0])) if arr.ndim == 2 else []
-        if self.obs_spec is not None and self.obs_spec.add_n:
+        if self.input_format is not None and self.input_format.add_n:
             expected_width = self.data_width + 1
             if arr.ndim != 2 or arr.shape[1] != expected_width:
                 raise ValueError(
                     "counts must include base features plus n_trials when "
-                    "obs_spec encodes n."
+                    "input_format encodes n."
                 )
             n_trials_values = arr[:, -1]
             arr = arr[:, : self.data_width]
@@ -1292,8 +1292,8 @@ class HierarchicalWorkflow:
         for subject_id, row in enumerate(arr):
             n_trials = int(n_trials_values[subject_id])
             row_arr = row
-            if self.obs_spec is not None:
-                row_arr = self.obs_spec.encode(row, n_trials)
+            if self.input_format is not None:
+                row_arr = self.input_format.encode(row, n_trials)
             elif self.row_transform is not None:
                 row_arr = np.asarray(
                     self.row_transform(row, n_trials=n_trials, model=self),
@@ -1303,7 +1303,7 @@ class HierarchicalWorkflow:
             encoded_width = self._encoded_data_width()
             data[0, subject_id, col : col + encoded_width] = row_arr
             col += encoded_width
-            if self.obs_spec is None and self.include_trial_feature:
+            if self.input_format is None and self.include_trial_feature:
                 data[0, subject_id, col] = self._format_trial_feature(n_trials)
                 col += 1
             if self.include_mask:
@@ -1342,18 +1342,18 @@ class HierarchicalWorkflow:
         estimator = self.build_posthoc_estimator()
         return estimator.estimate_subjects(counts, **kwargs)
 
-    def _obs_spec_metadata(self) -> dict | None:
-        """Return JSON-safe observation metadata for this workflow.
+    def _input_format_metadata(self) -> dict | None:
+        """Return JSON-safe input-format metadata for this workflow.
 
         Returns
         -------
         dict or None
-            Metadata from ``obs_spec`` when one is configured.
+            Metadata from ``input_format`` when one is configured.
         """
 
-        if self.obs_spec is None:
+        if self.input_format is None:
             return None
-        return self.obs_spec.to_dict()
+        return self.input_format.to_dict()
 
     def dynamic_fit(
         self,

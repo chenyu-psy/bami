@@ -3,10 +3,10 @@
 import numpy as np
 import pytest
 
+from bami.inputs import aggregate_summary, counts, proportions
 from bami.inference.priors import log_sigma_key, mu_raw_key, raw_key
 from bami.workflows import (
     HierarchicalWorkflow,
-    ObsSpec,
     SimpleWorkflow,
 )
 from bami.workflows.hierarchical import (
@@ -87,29 +87,29 @@ def _to_numpy(value) -> np.ndarray:
     return np.asarray(value)
 
 
-def test_obs_spec_log_range_scales_trial_count():
+def test_input_format_log_range_scales_trial_count():
     """Log-range n encoding should map range endpoints to -1 and 1."""
 
-    obs_spec = ObsSpec.aggregate_summary(n_range=(50, 200))
+    input_format = aggregate_summary(n_range=(50, 200))
 
-    assert np.isclose(obs_spec.transform_n(50), -1.0)
-    assert np.isclose(obs_spec.transform_n(200), 1.0)
-    assert obs_spec.to_dict()["kind"] == "aggregate_summary"
+    assert np.isclose(input_format.transform_n(50), -1.0)
+    assert np.isclose(input_format.transform_n(200), 1.0)
+    assert input_format.to_dict()["kind"] == "aggregate_summary"
 
 
-def test_obs_spec_presets_encode_expected_widths():
-    """Observation presets should preserve rows and append n only when requested."""
+def test_input_format_presets_encode_expected_widths():
+    """Input presets should preserve rows and append n only when requested."""
 
     row = np.array([0.2, 0.4], dtype=np.float32)
 
-    aggregate = ObsSpec.aggregate_summary(n_range=(10, 20)).encode(row, 10)
-    proportions = ObsSpec.proportions(n_range=(10, 20)).encode(row, 20)
-    counts = ObsSpec.counts().encode(row, 10)
-    counts_with_n = ObsSpec.counts(add_n=True, n_range=(10, 20)).encode(row, 10)
+    aggregate = aggregate_summary(n_range=(10, 20)).encode(row, 10)
+    proportion_row = proportions(n_range=(10, 20)).encode(row, 20)
+    count_row = counts().encode(row, 10)
+    counts_with_n = counts(add_n=True, n_range=(10, 20)).encode(row, 10)
 
     assert aggregate.shape == (3,)
-    assert proportions.shape == (3,)
-    assert counts.shape == (2,)
+    assert proportion_row.shape == (3,)
+    assert count_row.shape == (2,)
     assert counts_with_n.shape == (3,)
 
 
@@ -338,8 +338,8 @@ def test_simple_workflow_draws_trial_counts_from_range():
     assert model.workflow.trial_design == "flex"
 
 
-def test_simple_workflow_obs_spec_encodes_flex_summary_n():
-    """Flex simple aggregate rows should include encoded n through obs_spec."""
+def test_simple_workflow_input_format_encodes_flex_summary_n():
+    """Flex simple aggregate rows should include encoded n through input_format."""
 
     np.random.seed(2026)
     model = SimpleWorkflow(
@@ -351,7 +351,7 @@ def test_simple_workflow_obs_spec_encodes_flex_summary_n():
         data_width=1,
         n_trials=None,
         n_trials_range=(5, 9),
-        obs_spec=ObsSpec.aggregate_summary(n_range=(5, 8)),
+        input_format=aggregate_summary(n_range=(5, 8)),
         summary_dim=4,
         n_coupling_layers=2,
     )
@@ -677,7 +677,7 @@ def test_hierarchical_workflow_pads_flexible_subject_rows():
     assert model.workflow.workflow_family == "flex_hierarchical"
 
 
-def test_hierarchical_workflow_obs_spec_encodes_subject_summary_n():
+def test_hierarchical_workflow_input_format_encodes_subject_summary_n():
     """Flex hierarchy aggregate rows should include encoded n plus mask."""
 
     np.random.seed(2026)
@@ -689,7 +689,7 @@ def test_hierarchical_workflow_obs_spec_encodes_subject_summary_n():
         data_width=1,
         n_subjects_range=(2, 5),
         n_trials_range=(10, 15),
-        obs_spec=ObsSpec.aggregate_summary(n_range=(10, 14)),
+        input_format=aggregate_summary(n_range=(10, 14)),
         summary_dim=4,
         n_coupling_layers=2,
     )
@@ -700,7 +700,7 @@ def test_hierarchical_workflow_obs_spec_encodes_subject_summary_n():
     )
 
     assert sim["data"].shape == (6, 4, 3)
-    assert model.workflow.obs_spec_metadata["kind"] == "aggregate_summary"
+    assert model.workflow.input_format_metadata["kind"] == "aggregate_summary"
     assert np.all(sim["data"][:, :, 1] >= -1.0)
     assert np.all(sim["data"][:, :, 1] <= 1.0)
     assert manual_data.shape == (1, 4, 3)

@@ -1,8 +1,9 @@
-"""Observation formatting contracts for workflow inputs.
+"""Input-format helpers for workflow data rows.
 
-Observation specs make trial-count encoding explicit for workflows whose data
+These helpers make trial-count encoding explicit for workflows whose input
 rows lose reliability information, such as aggregate summaries or proportions.
-The default workflow behavior remains available by leaving ``obs_spec=None``.
+Most users should create formats with ``aggregate_summary()``, ``proportions()``,
+or ``counts()`` instead of constructing ``InputFormat`` directly.
 """
 
 from __future__ import annotations
@@ -12,18 +13,18 @@ from typing import Literal
 
 import numpy as np
 
-ObsKind = Literal["aggregate_summary", "proportions", "counts"]
+InputKind = Literal["aggregate_summary", "proportions", "counts"]
 NTransform = Literal["log_range", "linear_range"]
 
 
 @dataclass(frozen=True)
-class ObsSpec:
-    """Describe how one observation row should encode trial count.
+class InputFormat:
+    """Describe how one workflow input row should encode trial count.
 
     Parameters
     ----------
     kind
-        Named observation preset. Supported values are ``"aggregate_summary"``,
+        Named input preset. Supported values are ``"aggregate_summary"``,
         ``"proportions"``, and ``"counts"``.
     add_n
         Whether encoded rows append a trial-count feature.
@@ -35,115 +36,25 @@ class ObsSpec:
     Returns
     -------
     None
-        The initialized spec exposes ``encode`` and ``to_dict``.
+        The initialized format exposes ``encode`` and ``to_dict``.
     """
 
-    kind: ObsKind
+    kind: InputKind
     add_n: bool
     n_range: tuple[int, int] | None = None
     n_transform: NTransform = "log_range"
 
-    @classmethod
-    def aggregate_summary(
-        cls,
-        n_range: tuple[int, int],
-        n_transform: NTransform = "log_range",
-    ) -> "ObsSpec":
-        """Create a spec for fixed-width aggregate summaries.
-
-        Parameters
-        ----------
-        n_range
-            Trial-count range used to scale the appended trial-count feature.
-        n_transform
-            Named transform for the appended trial-count feature.
-
-        Returns
-        -------
-        ObsSpec
-            Spec that preserves summary features and appends encoded
-            ``n_trials``.
-        """
-
-        return cls(
-            kind="aggregate_summary",
-            add_n=True,
-            n_range=n_range,
-            n_transform=n_transform,
-        )
-
-    @classmethod
-    def proportions(
-        cls,
-        n_range: tuple[int, int],
-        n_transform: NTransform = "log_range",
-    ) -> "ObsSpec":
-        """Create a spec for proportion rows that need explicit trial count.
-
-        Parameters
-        ----------
-        n_range
-            Trial-count range used to scale the appended trial-count feature.
-        n_transform
-            Named transform for the appended trial-count feature.
-
-        Returns
-        -------
-        ObsSpec
-            Spec that preserves proportion features and appends encoded
-            ``n_trials``.
-        """
-
-        return cls(
-            kind="proportions",
-            add_n=True,
-            n_range=n_range,
-            n_transform=n_transform,
-        )
-
-    @classmethod
-    def counts(
-        cls,
-        add_n: bool = False,
-        n_range: tuple[int, int] | None = None,
-        n_transform: NTransform = "log_range",
-    ) -> "ObsSpec":
-        """Create a spec for count rows.
-
-        Parameters
-        ----------
-        add_n
-            Whether to append encoded ``n_trials`` in addition to count sums.
-        n_range
-            Trial-count range required when ``add_n`` is true.
-        n_transform
-            Named transform for the appended trial-count feature.
-
-        Returns
-        -------
-        ObsSpec
-            Spec that preserves count rows and optionally appends encoded
-            ``n_trials``.
-        """
-
-        return cls(
-            kind="counts",
-            add_n=add_n,
-            n_range=n_range,
-            n_transform=n_transform,
-        )
-
     def __post_init__(self) -> None:
-        """Validate spec fields after dataclass initialization.
+        """Validate format fields after dataclass initialization.
 
         Returns
         -------
         None
-            Raises ``ValueError`` when the spec is internally inconsistent.
+            Raises ``ValueError`` when the format is internally inconsistent.
         """
 
         if self.kind not in {"aggregate_summary", "proportions", "counts"}:
-            raise ValueError(f"Unsupported observation kind: {self.kind!r}.")
+            raise ValueError(f"Unsupported input kind: {self.kind!r}.")
         if self.n_transform not in {"log_range", "linear_range"}:
             raise ValueError(f"Unsupported n_transform: {self.n_transform!r}.")
         if self.add_n:
@@ -162,7 +73,7 @@ class ObsSpec:
         Returns
         -------
         int
-            Encoded observation width.
+            Encoded input width.
         """
 
         width = int(data_width)
@@ -171,12 +82,12 @@ class ObsSpec:
         return width
 
     def encode(self, row, n_trials: int) -> np.ndarray:
-        """Encode one observation row.
+        """Encode one workflow input row.
 
         Parameters
         ----------
         row
-            Base simulator row before observation-level trial-count encoding.
+            Base simulator row before trial-count encoding.
         n_trials
             Number of trials represented by ``row``.
 
@@ -207,13 +118,12 @@ class ObsSpec:
         """
 
         if not self.add_n:
-            raise ValueError("This obs spec does not encode n_trials.")
+            raise ValueError("This input format does not encode n_trials.")
         low, high = self._check_n_range(self.n_range)
         n_value = float(n_trials)
         if n_value < low or n_value > high:
             raise ValueError(
-                f"n_trials={n_trials} is outside the observation range "
-                f"({low}, {high})."
+                f"n_trials={n_trials} is outside the input range ({low}, {high})."
             )
         if self.n_transform == "linear_range":
             return self._scale_to_unit_interval(n_value, low, high)
@@ -224,7 +134,7 @@ class ObsSpec:
         return self._scale_to_unit_interval(log_value, log_low, log_high)
 
     def to_dict(self) -> dict:
-        """Return JSON-safe observation metadata.
+        """Return JSON-safe input-format metadata.
 
         Returns
         -------
@@ -282,3 +192,90 @@ class ObsSpec:
         if low < 1 or high <= low:
             raise ValueError("n_range must satisfy 1 <= low < high.")
         return low, high
+
+
+def aggregate_summary(
+    n_range: tuple[int, int],
+    n_transform: NTransform = "log_range",
+) -> InputFormat:
+    """Create an input format for fixed-width aggregate summaries.
+
+    Parameters
+    ----------
+    n_range
+        Trial-count range used to scale the appended trial-count feature.
+    n_transform
+        Named transform for the appended trial-count feature.
+
+    Returns
+    -------
+    InputFormat
+        Format that preserves summary features and appends encoded
+        ``n_trials``.
+    """
+
+    return InputFormat(
+        kind="aggregate_summary",
+        add_n=True,
+        n_range=n_range,
+        n_transform=n_transform,
+    )
+
+
+def proportions(
+    n_range: tuple[int, int],
+    n_transform: NTransform = "log_range",
+) -> InputFormat:
+    """Create an input format for proportion rows with explicit trial count.
+
+    Parameters
+    ----------
+    n_range
+        Trial-count range used to scale the appended trial-count feature.
+    n_transform
+        Named transform for the appended trial-count feature.
+
+    Returns
+    -------
+    InputFormat
+        Format that preserves proportion features and appends encoded
+        ``n_trials``.
+    """
+
+    return InputFormat(
+        kind="proportions",
+        add_n=True,
+        n_range=n_range,
+        n_transform=n_transform,
+    )
+
+
+def counts(
+    add_n: bool = False,
+    n_range: tuple[int, int] | None = None,
+    n_transform: NTransform = "log_range",
+) -> InputFormat:
+    """Create an input format for count rows.
+
+    Parameters
+    ----------
+    add_n
+        Whether to append encoded ``n_trials`` in addition to count sums.
+    n_range
+        Trial-count range required when ``add_n`` is true.
+    n_transform
+        Named transform for the appended trial-count feature.
+
+    Returns
+    -------
+    InputFormat
+        Format that preserves count rows and optionally appends encoded
+        ``n_trials``.
+    """
+
+    return InputFormat(
+        kind="counts",
+        add_n=add_n,
+        n_range=n_range,
+        n_transform=n_transform,
+    )

@@ -1,8 +1,8 @@
-"""Tests for train_model checkpoint loading and saving."""
+"""Tests for fit_workflow checkpoint loading and saving."""
 
 import pytest
 
-from bami.recovery import train_model
+from bami.training import fit_workflow
 
 
 class _ToyApproximator:
@@ -24,7 +24,7 @@ class _ToyTrainWorkflow:
 
 
 class _ToyTrainModel:
-    """Minimal model object exposing the train_model interface."""
+    """Minimal model object exposing the fit_workflow interface."""
 
     def __init__(self):
         """Create a fake model and record dynamic_fit calls."""
@@ -42,7 +42,7 @@ class _ToyTrainModel:
 
 
 def _train_kwargs() -> dict:
-    """Return the smallest valid training settings for train_model tests."""
+    """Return the smallest valid training settings for fit_workflow tests."""
 
     return {
         "max_epochs": 1,
@@ -59,20 +59,20 @@ def _train_kwargs() -> dict:
     }
 
 
-def test_train_model_saves_checkpoint_when_file_is_supplied(tmp_path):
-    """train_model should save workflow weights after a successful fit."""
+def test_fit_workflow_saves_checkpoint_when_file_is_supplied(tmp_path):
+    """fit_workflow should save workflow weights after a successful fit."""
 
     model = _ToyTrainModel()
     checkpoint_path = tmp_path / "toy_workflow.keras"
 
-    history = train_model(model, file=checkpoint_path, **_train_kwargs())
+    history = fit_workflow(model, file=checkpoint_path, **_train_kwargs())
 
     assert history == {"loss": [1.0]}
     assert checkpoint_path.read_text(encoding="utf-8") == "saved"
     assert model.fit_kwargs["keep_optimizer"] is True
 
 
-def test_train_model_loads_existing_checkpoint_by_default(tmp_path, monkeypatch):
+def test_fit_workflow_loads_existing_checkpoint_by_default(tmp_path, monkeypatch):
     """Existing checkpoints should be loaded unless overwrite is requested."""
 
     model = _ToyTrainModel()
@@ -88,21 +88,21 @@ def test_train_model_loads_existing_checkpoint_by_default(tmp_path, monkeypatch)
 
     monkeypatch.setattr("bami.inference.checkpoints.load_workflow_weights", fake_load)
 
-    result = train_model(model, file=checkpoint_path, **_train_kwargs())
+    result = fit_workflow(model, file=checkpoint_path, **_train_kwargs())
 
     assert result == {"loaded": True, "file": checkpoint_path}
     assert loaded_paths == [checkpoint_path]
     assert model.fit_count == 0
 
 
-def test_train_model_overwrites_existing_checkpoint_when_requested(tmp_path):
+def test_fit_workflow_overwrites_existing_checkpoint_when_requested(tmp_path):
     """overwrite=True should force training and save over an existing file."""
 
     model = _ToyTrainModel()
     checkpoint_path = tmp_path / "toy_workflow.keras"
     checkpoint_path.write_text("existing", encoding="utf-8")
 
-    history = train_model(
+    history = fit_workflow(
         model,
         file=checkpoint_path,
         overwrite=True,
@@ -114,16 +114,16 @@ def test_train_model_overwrites_existing_checkpoint_when_requested(tmp_path):
     assert model.fit_count == 1
 
 
-def test_train_model_rejects_invalid_checkpoint_paths(tmp_path):
+def test_fit_workflow_rejects_invalid_checkpoint_paths(tmp_path):
     """Checkpoint files must be non-directory .keras paths."""
 
     model = _ToyTrainModel()
 
     with pytest.raises(ValueError, match="not a directory"):
-        train_model(model, file=tmp_path, **_train_kwargs())
+        fit_workflow(model, file=tmp_path, **_train_kwargs())
 
     with pytest.raises(ValueError, match=".keras"):
-        train_model(
+        fit_workflow(
             model,
             file=tmp_path / "toy_workflow.pt",
             **_train_kwargs(),

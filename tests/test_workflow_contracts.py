@@ -50,7 +50,7 @@ def _subject_loglik(data_row, candidates):
 
 
 def test_valid_training_contract_passes_without_loglik():
-    """Training and group recovery should not require subject_loglik."""
+    """Workflow fitting and group recovery should not require subject_loglik."""
 
     contract = {
         "name": "demo",
