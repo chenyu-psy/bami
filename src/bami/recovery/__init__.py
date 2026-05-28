@@ -1,78 +1,13 @@
-"""Recovery-analysis helpers for model comparison."""
+"""DataFrame-first recovery workflows.
 
-from bami.evaluation import (
-    bf_calibration,
-    bf_coverage,
-    bf_flex_ind_recovery,
-    bf_ind_recovery,
-    bf_pop_recovery,
-    bf_zscore,
-    brms_calibration,
-    brms_coverage,
-    brms_ind_recovery,
-    brms_pop_recovery,
-    brms_zscore,
-    plot_calibration_ecdf,
-    plot_coverage,
-    plot_individual_recovery,
-    plot_population_recovery,
-    plot_zscore_contraction,
-    validate_diagnostic_contract,
-    validate_recovery_contract,
-)
-from .metrics import compute_pearson_r, validate_result_schema
-from .group import (
-    BASE_PARAMS,
-    train_model,
-    set_global_seed,
-    generate_group_datasets,
-    load_group_generated_data,
-    group_model_conditions,
-    estimate_group_population_recovery,
-    estimate_simple_subject_recovery,
-    summarize_population_recovery_diagnostics,
-    summarize_edge_param_quantile_bias,
-    prepare_flex_subject_recovery_data,
-    label_fit_model,
-    save_group_recovery_rows,
-    load_group_recovery_rows,
-    examine_group_recovery,
-)
+Use this module to simulate group-generated recovery data, recover parameters
+with one fitted workflow, and summarize recovery rows.
+"""
+
+from .group import simulate, recover, summarize
 
 __all__ = [
-    "compute_pearson_r",
-    "validate_result_schema",
-    "BASE_PARAMS",
-    "train_model",
-    "set_global_seed",
-    "generate_group_datasets",
-    "load_group_generated_data",
-    "group_model_conditions",
-    "estimate_group_population_recovery",
-    "estimate_simple_subject_recovery",
-    "summarize_population_recovery_diagnostics",
-    "summarize_edge_param_quantile_bias",
-    "prepare_flex_subject_recovery_data",
-    "label_fit_model",
-    "save_group_recovery_rows",
-    "load_group_recovery_rows",
-    "examine_group_recovery",
-    "validate_recovery_contract",
-    "validate_diagnostic_contract",
-    "plot_population_recovery",
-    "plot_individual_recovery",
-    "plot_calibration_ecdf",
-    "plot_coverage",
-    "plot_zscore_contraction",
-    "bf_pop_recovery",
-    "bf_ind_recovery",
-    "bf_flex_ind_recovery",
-    "bf_calibration",
-    "bf_coverage",
-    "bf_zscore",
-    "brms_pop_recovery",
-    "brms_ind_recovery",
-    "brms_calibration",
-    "brms_coverage",
-    "brms_zscore",
+    "simulate",
+    "recover",
+    "summarize",
 ]

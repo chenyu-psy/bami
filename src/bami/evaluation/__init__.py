@@ -15,6 +15,9 @@ from .contracts import (
     validate_diagnostic_contract,
 )
 from .metrics import (
+    compute_ccc,
+    compute_corr,
+    compute_rmse,
     bf_pop_recovery,
     bf_ind_recovery,
     bf_flex_ind_recovery,
@@ -47,6 +50,9 @@ __all__ = [
     "VALID_LEVELS",
     "validate_recovery_contract",
     "validate_diagnostic_contract",
+    "compute_ccc",
+    "compute_corr",
+    "compute_rmse",
     "bf_pop_recovery",
     "bf_ind_recovery",
     "bf_flex_ind_recovery",

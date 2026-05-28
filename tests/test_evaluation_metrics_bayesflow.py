@@ -21,7 +21,7 @@ from bami.evaluation.metrics.bayesflow import (
     estimate_population_recovery,
     sample_posterior,
 )
-from fixtures_model_specs import M3_SPEC
+from fixtures_model_specs import M3_SPEC, m3_activation
 from bami.inference import transform_hierarchical_samples
 from bami.inference.posthoc import M3PosthocEstimator
 from bami.inference.priors import (
@@ -30,7 +30,7 @@ from bami.inference.priors import (
     raw_key,
     transform_simple_samples,
 )
-from bami.simulators.m3 import normalize_m3_count_row, simulate_m3_counts
+from bami.simulators.m3 import prop_m3, simulate_m3_custom
 from bami.workflows import HierarchicalWorkflow
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -59,16 +59,20 @@ def _build_m3_hierarchy(
         Generic workflow with M3 posthoc settings.
     """
 
-    row_transform = normalize_m3_count_row if normalize_counts else None
+    row_transform = prop_m3 if normalize_counts else None
     trial_feature_scale = None
     if normalize_counts and n_trials_range is not None:
         trial_feature_scale = n_trials_range[1] - 1
     return HierarchicalWorkflow(
         name=M3_SPEC["model_name"],
         priors=M3_SPEC["priors"],
-        simulator=simulate_m3_counts,
+        simulator=simulate_m3_custom,
         observation="aggregate",
-        simulator_kwargs={"n_options": M3_SPEC["n_options"], "rule": M3_SPEC["rule"]},
+        simulator_kwargs={
+            "activation_fn": m3_activation,
+            "n_options": M3_SPEC["n_options"],
+            "rule": M3_SPEC["rule"],
+        },
         data_width=len(M3_SPEC["activation_contract"]["order"]),
         n_subjects=n_subjects,
         n_subjects_range=n_subjects_range,

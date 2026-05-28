@@ -352,10 +352,10 @@ class PosthocSampler:
         if fixed_trials is not None:
             return np.full((n_datasets, n_subjects), int(fixed_trials), dtype=int)
 
-        obs_spec = getattr(self.model, "obs_spec", None)
-        if obs_spec is not None and getattr(obs_spec, "add_n", False):
+        input_format = getattr(self.model, "input_format", None)
+        if input_format is not None and getattr(input_format, "add_n", False):
             raise ValueError(
-                "Cannot recover raw n_trials from encoded ObsSpec data. "
+                "Cannot recover raw n_trials from encoded input-format data. "
                 "Pass fixed n_trials or include explicit trial counts in the data."
             )
 

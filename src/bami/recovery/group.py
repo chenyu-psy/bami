@@ -1,168 +1,24 @@
-"""Model-comparison recovery analysis helpers.
+"""Internal helpers for group-generated recovery analysis.
 
 This module supports the group-generated three-step recovery workflow:
-1) generate model-comparison datasets,
+1) generate group-level datasets,
 2) fit trained models to generated datasets,
 3) examine recovery metrics and plots.
 """
-
-from pathlib import Path
-import pickle
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
 from bami.evaluation import (
+    compute_ccc,
+    compute_corr,
+    estimate_fixed_individual_recovery,
+    estimate_flex_individual_recovery,
     estimate_population_recovery,
     sample_posterior,
     validate_recovery_contract,
 )
-from bami.inference.runtime import configure_torch_device
-
-from .metrics import compute_ccc, compute_pearson_r
-
-BASE_PARAMS = ["a", "c", "ra", "rc"]
-GROUP_FIT_MODELS = [
-    "fixed_simple",
-    "flex_simple",
-    "fixed_hierarchy",
-    "flex_hierarchy",
-]
-EDGE_PARAMS = ["ra_mu", "rc_mu"]
-
-
-def set_global_seed(seed: int) -> None:
-    """Set deterministic random seeds for reproducibility.
-
-    Parameters
-    ----------
-    seed : int
-        Random seed value.
-
-    Returns
-    -------
-    None
-        Updates global random states.
-    """
-
-    np.random.seed(seed)
-    try:
-        import torch
-
-        torch.manual_seed(seed)
-    except Exception:
-        pass
-
-
-def train_model(
-    model,
-    *,
-    max_epochs: int,
-    initial_epochs: int,
-    n_batch: int,
-    batch_size: int,
-    validation_data: int,
-    patience: int,
-    min_delta: float,
-    workers: int = 4,
-    max_queue_size: int = 16,
-    torch_device: str | None = None,
-    verbose: int = 1,
-    file: str | Path | None = None,
-    overwrite: bool = False,
-):
-    """Train one model using shared training settings.
-
-    Parameters
-    ----------
-    model
-        Model object to train. The object must expose ``dynamic_fit`` and,
-        when ``file`` is supplied, ``workflow.approximator``.
-    max_epochs, initial_epochs, n_batch, batch_size, validation_data, patience, min_delta :
-        Training control values passed to `dynamic_fit`.
-    workers : int, optional
-        Number of Keras data-loading workers for online simulation batches.
-    max_queue_size : int, optional
-        Maximum queue length for prefetched simulation batches.
-    torch_device : str, optional
-        Torch default device to use during training, such as ``"mps"`` or
-        ``"cpu"``. Unavailable accelerators fall back to CPU.
-    verbose : int, optional
-        Training log verbosity level passed to Keras.
-    file : str or pathlib.Path, optional
-        Checkpoint path. When supplied, existing weights are loaded by default
-        and new weights are saved after training.
-    overwrite : bool, optional
-        Whether to retrain and overwrite ``file`` when the checkpoint already
-        exists.
-
-    Returns
-    -------
-    dict
-        Training history object returned by model workflow, or a small
-        ``{"loaded": True, "file": path}`` dictionary when an existing
-        checkpoint is reused.
-    """
-
-    selected_device = configure_torch_device(torch_device)
-    if torch_device is not None:
-        print(f"Using Torch device for training: {selected_device}", flush=True)
-
-    checkpoint_path = None
-    if file is not None:
-        checkpoint_path = _check_checkpoint_path(file)
-        if checkpoint_path.exists() and not overwrite:
-            from bami.inference.checkpoints import load_workflow_weights
-
-            load_workflow_weights(model, checkpoint_path)
-            print(f"Loaded workflow weights: {checkpoint_path}", flush=True)
-            return {"loaded": True, "file": checkpoint_path}
-
-    history = model.dynamic_fit(
-        max_epochs=max_epochs,
-        initial_epochs=initial_epochs,
-        n_batch=n_batch,
-        batch_size=batch_size,
-        validation_data=validation_data,
-        patience=patience,
-        min_delta=min_delta,
-        workers=workers,
-        use_multiprocessing=False,
-        max_queue_size=max_queue_size,
-        verbose=verbose,
-        keep_optimizer=True,
-    )
-    if checkpoint_path is not None:
-        from bami.inference.checkpoints import save_workflow_weights
-
-        saved_path = save_workflow_weights(model, checkpoint_path)
-        print(f"Saved workflow weights: {saved_path}", flush=True)
-    return history
-
-
-def _check_checkpoint_path(file: str | Path) -> Path:
-    """Validate a user-supplied checkpoint path.
-
-    Parameters
-    ----------
-    file
-        String or ``Path`` pointing to the desired checkpoint artifact.
-
-    Returns
-    -------
-    pathlib.Path
-        Normalized non-empty checkpoint path.
-    """
-
-    checkpoint_path = Path(file)
-    if str(checkpoint_path).strip() == "":
-        raise ValueError("file must be a non-empty checkpoint path.")
-    if checkpoint_path.exists() and checkpoint_path.is_dir():
-        raise ValueError("file must point to a checkpoint file, not a directory.")
-    if checkpoint_path.suffix != ".keras":
-        raise ValueError("file must use the .keras checkpoint extension.")
-    return checkpoint_path
 
 
 def _population_param_key(base_param: str) -> str:
@@ -171,7 +27,7 @@ def _population_param_key(base_param: str) -> str:
     Parameters
     ----------
     base_param : str
-        Base M3 parameter name, such as ``a`` or ``ra``.
+        Base parameter name, such as ``theta``.
 
     Returns
     -------
@@ -182,67 +38,30 @@ def _population_param_key(base_param: str) -> str:
     return f"{base_param}_mu"
 
 
-def _save_table(df: pd.DataFrame, path: str | Path) -> Path:
-    """Save a dataframe to CSV with parent-folder creation.
+def _check_param_list(params: list[str] | tuple[str, ...], name: str) -> list[str]:
+    """Validate a user-supplied list of parameter names.
 
     Parameters
     ----------
-    df : pd.DataFrame
-        Table to save.
-    path : str | Path
-        Output file path.
+    params
+        Parameter names supplied by the caller.
+    name
+        Argument name used in error messages.
 
     Returns
     -------
-    Path
-        Saved path.
+    list[str]
+        Parameter names as a plain list.
     """
 
-    out = Path(path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(out, index=False)
-    return out
-
-
-def _save_pickle(obj, path: str | Path) -> Path:
-    """Save a Python object as pickle.
-
-    Parameters
-    ----------
-    obj : Any
-        Object to store.
-    path : str | Path
-        Destination file path.
-
-    Returns
-    -------
-    Path
-        Saved path.
-    """
-
-    out = Path(path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    with out.open("wb") as f:
-        pickle.dump(obj, f)
-    return out
-
-
-def _load_pickle(path: str | Path):
-    """Load a Python object from pickle.
-
-    Parameters
-    ----------
-    path : str | Path
-        Pickle file path.
-
-    Returns
-    -------
-    Any
-        Loaded object.
-    """
-
-    with Path(path).open("rb") as f:
-        return pickle.load(f)
+    if params is None:
+        raise ValueError(f"{name} must be provided explicitly.")
+    checked = list(params)
+    if not checked:
+        raise ValueError(f"{name} must contain at least one parameter name.")
+    if any(not str(param).strip() for param in checked):
+        raise ValueError(f"{name} must contain non-empty parameter names.")
+    return checked
 
 
 def _flex_conditions_from_counts(
@@ -323,12 +142,12 @@ def _append_n_trials_if_needed(
     rows: np.ndarray,
     n_trials: int | None,
 ) -> np.ndarray:
-    """Append explicit trial counts for workflows whose ``ObsSpec`` encodes n.
+    """Append explicit trial counts for workflows whose input format encodes n.
 
     Parameters
     ----------
     model
-        Workflow model whose observation spec determines whether an ``n`` column
+        Workflow model whose input format determines whether an ``n`` column
         is required.
     rows
         Subject rows before workflow-level formatting.
@@ -341,13 +160,13 @@ def _append_n_trials_if_needed(
         Original rows, or rows with one appended trial-count column.
     """
 
-    obs_spec = getattr(model, "obs_spec", None)
-    if obs_spec is None or not getattr(obs_spec, "add_n", False):
+    input_format = getattr(model, "input_format", None)
+    if input_format is None or not getattr(input_format, "add_n", False):
         return rows
     if n_trials is None:
         raise ValueError(
             "n_trials is required when converting generated summary rows for "
-            "a flex workflow whose ObsSpec encodes trial count."
+            "a flex workflow whose input_format encodes trial count."
         )
     n_col = np.full((*rows.shape[:-1], 1), int(n_trials), dtype=np.float32)
     return np.concatenate([rows, n_col], axis=-1)
@@ -380,7 +199,7 @@ def _summarize_recovery_r(
         row = dict(zip(group_cols, group_values, strict=True))
         truth = group_df["true_value"].to_numpy(dtype=float)
         estimate = group_df["est_value"].to_numpy(dtype=float)
-        row["r"] = compute_pearson_r(truth, estimate)
+        row["r"] = compute_corr(truth, estimate)
         row["n"] = int(group_df.shape[0])
         rows.append(row)
     return pd.DataFrame(rows)
@@ -420,7 +239,7 @@ def _summarize_recovery_ccc(
     return pd.DataFrame(rows)
 
 
-def summarize_population_recovery_diagnostics(
+def _summarize_population_recovery_diagnostics(
     rows: pd.DataFrame,
     *,
     group_cols: list[str] | None = None,
@@ -470,7 +289,7 @@ def summarize_population_recovery_diagnostics(
         out_row.update(
             {
                 "ccc": compute_ccc(truth, estimate),
-                "r": compute_pearson_r(truth, estimate),
+                "r": compute_corr(truth, estimate),
                 "slope": float(slope),
                 "intercept": float(intercept),
                 "bias": float(np.nanmean(error)),
@@ -484,22 +303,20 @@ def summarize_population_recovery_diagnostics(
     return pd.DataFrame(diagnostic_rows)
 
 
-def summarize_edge_param_quantile_bias(
+def _summarize_param_quantile_bias(
     rows: pd.DataFrame,
     *,
-    params: list[str] | None = None,
+    params: list[str] | tuple[str, ...],
     n_quantiles: int = 4,
 ) -> pd.DataFrame:
-    """Summarize bias across true-value quantiles for boundary parameters.
+    """Summarize bias across true-value quantiles for selected parameters.
 
     Parameters
     ----------
     rows : pd.DataFrame
         Long-format population recovery rows.
-    params : list[str], optional
-        Population parameters to diagnose. Defaults to ``ra_mu`` and
-        ``rc_mu`` because these parameters are bounded and visually showed
-        possible center compression.
+    params : list[str]
+        Population parameters to diagnose.
     n_quantiles : int, optional
         Number of true-value bins within each fit-model and parameter group.
 
@@ -511,8 +328,7 @@ def summarize_edge_param_quantile_bias(
         middle of the parameter range.
     """
 
-    if params is None:
-        params = EDGE_PARAMS
+    selected_params = _check_param_list(params, "params")
     if n_quantiles < 2:
         raise ValueError("n_quantiles must be at least 2.")
 
@@ -522,8 +338,8 @@ def summarize_edge_param_quantile_bias(
         raise ValueError(f"Missing required recovery columns: {missing}")
 
     diagnostic_rows = []
-    edge_rows = rows[rows["param"].isin(params)].copy()
-    for (fit_name, param), group_df in edge_rows.groupby(
+    selected_rows = rows[rows["param"].isin(selected_params)].copy()
+    for (fit_name, param), group_df in selected_rows.groupby(
         ["fit_model", "param"],
         sort=True,
     ):
@@ -566,11 +382,10 @@ def summarize_edge_param_quantile_bias(
 def _plot_group_population_recovery(
     rows: pd.DataFrame,
     summary: pd.DataFrame,
-    path: str | Path,
     *,
-    base_params: list[str] | None = None,
+    base_params: list[str] | tuple[str, ...],
     fit_models: list[str] | None = None,
-) -> Path:
+) -> plt.Figure:
     """Plot population recovery scatters for all fit models.
 
     Each panel shows the identity line and a simple linear fit ``y ~ x``. The
@@ -582,25 +397,20 @@ def _plot_group_population_recovery(
         Population recovery rows with one row per dataset.
     summary : pd.DataFrame
         CCC values by fit model and parameter.
-    path : str or Path
-        Destination image path.
-
     Returns
     -------
-    Path
-        Saved plot path.
+    matplotlib.figure.Figure
+        Population recovery figure.
     """
 
-    out = Path(path)
-    out.parent.mkdir(parents=True, exist_ok=True)
     point_color = "#8ecae6"
     fit_color = "#1f4e79"
 
-    selected_fit_models = fit_models or GROUP_FIT_MODELS
+    selected_fit_models = fit_models or sorted(rows["fit_model"].unique())
     shown_fit_models = [
         name for name in selected_fit_models if name in rows["fit_model"].unique()
     ]
-    selected_base_params = base_params or BASE_PARAMS
+    selected_base_params = _check_param_list(base_params, "base_params")
     params = [_population_param_key(param) for param in selected_base_params]
     fig, axes = plt.subplots(
         len(shown_fit_models),
@@ -662,37 +472,28 @@ def _plot_group_population_recovery(
             ax.grid(alpha=0.2)
 
     fig.tight_layout()
-    fig.savefig(out, dpi=200)
-    plt.close(fig)
-    return out
+    return fig
 
 
 def _plot_group_individual_recovery(
     correlations: pd.DataFrame,
-    path: str | Path,
     *,
-    base_params: list[str] | None = None,
+    base_params: list[str] | tuple[str, ...],
     fit_models: list[str] | None = None,
-) -> Path:
+) -> plt.Figure:
     """Plot per-dataset individual recovery correlations.
 
     Parameters
     ----------
     correlations : pd.DataFrame
         One correlation per fit model, dataset, and parameter.
-    path : str or Path
-        Destination image path.
-
     Returns
     -------
-    Path
-        Saved plot path.
+    matplotlib.figure.Figure
+        Individual recovery figure.
     """
 
-    out = Path(path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-
-    selected_fit_models = fit_models or GROUP_FIT_MODELS
+    selected_fit_models = fit_models or sorted(correlations["fit_model"].unique())
     shown_fit_models = [
         fit_name
         for fit_name in selected_fit_models
@@ -705,7 +506,7 @@ def _plot_group_individual_recovery(
         squeeze=False,
     )
     rng = np.random.default_rng(2026)
-    params = base_params or BASE_PARAMS
+    params = _check_param_list(base_params, "base_params")
     positions = np.arange(1, len(params) + 1)
 
     for row_idx, fit_name in enumerate(shown_fit_models):
@@ -757,74 +558,40 @@ def _plot_group_individual_recovery(
         ax.grid(axis="y", alpha=0.25)
 
     fig.tight_layout()
-    fig.savefig(out, dpi=200)
-    plt.close(fig)
-    return out
+    return fig
 
 
-def generate_group_datasets(
+def simulate(
     *,
-    group_generator: object,
+    generator: object,
     n_reps: int,
-    seed: int,
-    artifact_dir: str | Path,
-    artifact_prefix: str = "11_M3",
-) -> Path:
-    """Generate group-level datasets for model comparison.
+) -> dict[str, object]:
+    """Generate group-level datasets for recovery checks.
 
     Parameters
     ----------
-    group_generator : object
+    generator : object
         Generator that draws group-level parameters, subject-level parameters,
         and subject count data.
     n_reps : int
         Number of generated datasets. This is the user-facing knob that can be
         increased from 100 to larger comparison runs.
-    seed : int
-        Random seed.
-    artifact_dir : str or Path
-        Directory to save the generated artifact.
-    artifact_prefix : str, optional
-        File prefix for the saved artifact.
-
-    Returns
-    -------
-    Path
-        Path to the generated-data artifact file.
-    """
-
-    set_global_seed(seed)
-    sim_data = group_generator.workflow.simulate(n_reps)
-    payload = {
-        "seed": seed,
-        "n_reps": int(n_reps),
-        "n_subjects": int(np.asarray(sim_data["data"]).shape[1]),
-        "sim_data": sim_data,
-    }
-    return _save_pickle(
-        payload,
-        Path(artifact_dir) / f"{artifact_prefix}_group_generated_data.pkl",
-    )
-
-
-def load_group_generated_data(path: str | Path) -> dict:
-    """Load one group-generated data artifact.
-
-    Parameters
-    ----------
-    path : str or Path
-        Path produced by ``generate_group_datasets``.
 
     Returns
     -------
     dict
-        Generated payload with ``sim_data`` and metadata.
+        Payload with ``n_reps``, ``n_subjects``, and ``sim_data``.
     """
 
-    return _load_pickle(path)
+    sim_data = generator.workflow.simulate(n_reps)
+    return {
+        "n_reps": int(n_reps),
+        "n_subjects": int(np.asarray(sim_data["data"]).shape[1]),
+        "sim_data": sim_data,
+    }
 
 
-def group_model_conditions(
+def _model_conditions(
     *,
     fit_name: str,
     fit_model,
@@ -843,7 +610,7 @@ def group_model_conditions(
     sim_data : dict[str, np.ndarray]
         Group-generated simulation payload.
     n_trials : int, optional
-        Fixed trial count to append when a flex fit model uses an ``ObsSpec``
+        Fixed trial count to append when a flex fit model uses an input format
         with encoded trial counts.
 
     Returns
@@ -867,12 +634,12 @@ def group_model_conditions(
     return {"data": sim_data["data"]}
 
 
-def estimate_group_population_recovery(
+def _estimate_population_recovery(
     *,
     fit_name: str,
     sim_data: dict[str, np.ndarray],
     samples: dict[str, np.ndarray],
-    base_params: list[str] | None = None,
+    base_params: list[str] | tuple[str, ...],
 ) -> pd.DataFrame:
     """Build population recovery rows for one model-comparison fit.
 
@@ -884,7 +651,7 @@ def estimate_group_population_recovery(
         Generated group-level simulation payload.
     samples : dict[str, np.ndarray]
         Posterior samples for one fitted model.
-    base_params : list[str], optional
+    base_params : list[str]
         Public subject parameter names to evaluate.
 
     Returns
@@ -895,7 +662,7 @@ def estimate_group_population_recovery(
 
     truth_data = {}
     aligned_samples = {}
-    selected_base_params = base_params or BASE_PARAMS
+    selected_base_params = _check_param_list(base_params, "base_params")
     for base_param in selected_base_params:
         truth_key = _population_param_key(base_param)
         sample_key = (
@@ -911,17 +678,19 @@ def estimate_group_population_recovery(
         variable_keys=[_population_param_key(param) for param in selected_base_params],
         show_progress=False,
     )
-    return label_fit_model(rows, fit_name)
+    return _label_fit_model(rows, fit_name)
 
 
-def estimate_simple_subject_recovery(
+def _estimate_simple_subject_recovery(
     *,
     fit_name: str,
     fit_model: object,
     sim_data: dict[str, np.ndarray],
     posterior_samples: int,
-    base_params: list[str] | None = None,
+    base_params: list[str] | tuple[str, ...],
     n_trials: int | None = None,
+    approximator_kwargs: dict | None = None,
+    sample_batch_size: int | None = None,
 ) -> pd.DataFrame:
     """Estimate subject-level recovery rows with a simple model.
 
@@ -939,7 +708,7 @@ def estimate_simple_subject_recovery(
         Generated group-level simulation payload.
     posterior_samples : int
         Number of posterior draws per subject-level dataset.
-    base_params : list[str], optional
+    base_params : list[str]
         Public subject parameter names to evaluate.
     n_trials : int, optional
         Fixed trial count to append for flex summary workflows.
@@ -950,6 +719,7 @@ def estimate_simple_subject_recovery(
         Individual recovery rows with ``fit_model`` added.
     """
 
+    selected_base_params = _check_param_list(base_params, "base_params")
     data = np.asarray(sim_data["data"], dtype=np.float32)
     data_width = int(getattr(fit_model, "data_width", data.shape[-1]))
     if data.ndim != 3 or data.shape[-1] != data_width:
@@ -975,10 +745,11 @@ def estimate_simple_subject_recovery(
         workflow=fit_model.workflow,
         test_data=conditions,
         num_samples=posterior_samples,
+        approximator_kwargs=approximator_kwargs,
+        sample_batch_size=sample_batch_size,
     )
 
     rows = []
-    selected_base_params = base_params or BASE_PARAMS
     for base_param in selected_base_params:
         if base_param not in samples:
             continue
@@ -1010,12 +781,15 @@ def estimate_simple_subject_recovery(
 
     out = pd.DataFrame(rows)
     validate_recovery_contract(out)
-    return label_fit_model(out, fit_name)
+    return _label_fit_model(out, fit_name)
 
 
-def prepare_flex_subject_recovery_data(
+def _prepare_flex_subject_recovery_data(
     flex_model: object,
     sim_data: dict[str, np.ndarray],
+    *,
+    base_params: list[str] | tuple[str, ...],
+    n_trials: int | None = None,
 ) -> dict[str, np.ndarray]:
     """Convert fixed group-generated data to flex-hierarchy recovery data.
 
@@ -1025,6 +799,8 @@ def prepare_flex_subject_recovery_data(
         Flex model that defines padded data width.
     sim_data : dict[str, np.ndarray]
         Generated fixed-subject group data.
+    base_params : list[str]
+        Public subject parameter names to copy into the flex-formatted payload.
 
     Returns
     -------
@@ -1033,7 +809,11 @@ def prepare_flex_subject_recovery_data(
         ``estimate_flex_individual_recovery``.
     """
 
-    conditions = _flex_conditions_from_counts(flex_model, sim_data["data"])
+    conditions = _flex_conditions_from_counts(
+        flex_model,
+        sim_data["data"],
+        n_trials=n_trials,
+    )
     data = conditions["data"]
     n_datasets, max_subjects = data.shape[:2]
     n_subjects = np.asarray(sim_data["data"]).shape[1]
@@ -1041,7 +821,7 @@ def prepare_flex_subject_recovery_data(
     raw_counts[:, :n_subjects, :] = np.asarray(sim_data["data"], dtype=np.float32)
     out = {"data": data, "raw_counts": raw_counts}
 
-    for base_param in BASE_PARAMS:
+    for base_param in _check_param_list(base_params, "base_params"):
         truth = np.full((n_datasets, max_subjects), np.nan, dtype=np.float32)
         array_key = f"{base_param}_subj"
         if array_key in sim_data:
@@ -1066,7 +846,7 @@ def prepare_flex_subject_recovery_data(
     return out
 
 
-def label_fit_model(df: pd.DataFrame, fit_name: str) -> pd.DataFrame:
+def _label_fit_model(df: pd.DataFrame, fit_name: str) -> pd.DataFrame:
     """Add the model-comparison fit label to recovery rows.
 
     Parameters
@@ -1087,113 +867,159 @@ def label_fit_model(df: pd.DataFrame, fit_name: str) -> pd.DataFrame:
     return out
 
 
-def save_group_recovery_rows(
+def recover(
     *,
-    population_rows: pd.DataFrame,
-    individual_rows: pd.DataFrame,
-    artifact_dir: str | Path,
-    artifact_prefix: str = "11_M3",
-) -> dict[str, Path]:
-    """Save Step 22 recovery rows as pickle and CSV artifacts.
-
-    Parameters
-    ----------
-    population_rows : pd.DataFrame
-        Population recovery rows for all fit models.
-    individual_rows : pd.DataFrame
-        Individual recovery rows for all fit models.
-    artifact_dir : str or Path
-        Artifact directory.
-    artifact_prefix : str, optional
-        File prefix for saved artifacts.
-
-    Returns
-    -------
-    dict[str, Path]
-        Saved artifact paths.
-    """
-
-    out_dir = Path(artifact_dir)
-    return {
-        "population_rows_pkl": _save_pickle(
-            population_rows,
-            out_dir / f"{artifact_prefix}_group_population_recovery_rows.pkl",
-        ),
-        "population_rows_csv": _save_table(
-            population_rows,
-            out_dir / f"{artifact_prefix}_group_population_recovery_rows.csv",
-        ),
-        "individual_rows_pkl": _save_pickle(
-            individual_rows,
-            out_dir / f"{artifact_prefix}_group_individual_recovery_rows.pkl",
-        ),
-        "individual_rows_csv": _save_table(
-            individual_rows,
-            out_dir / f"{artifact_prefix}_group_individual_recovery_rows.csv",
-        ),
-    }
-
-
-def load_group_recovery_rows(
-    *,
-    population_rows_path: str | Path,
-    individual_rows_path: str | Path,
+    fit_name: str,
+    fit_model: object,
+    sim_data: dict[str, np.ndarray],
+    base_params: list[str] | tuple[str, ...],
+    posterior_samples: int,
+    n_trials: int | None = None,
+    approximator_kwargs: dict | None = None,
+    sample_batch_size: int | None = None,
+    n_candidates: int = 4000,
+    min_ess: float = 200.0,
+    max_candidates: int = 20000,
+    batch_candidates: int | None = None,
+    adaptive: bool = True,
+    show_progress: bool = True,
+    n_jobs: int = 1,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load Step 22 recovery-row artifacts.
+    """Estimate population and individual recovery rows for one fitted model.
 
     Parameters
     ----------
-    population_rows_path : str or Path
-        Pickle path for population recovery rows.
-    individual_rows_path : str or Path
-        Pickle path for individual recovery rows.
+    fit_name : str
+        Fit model label: ``fixed_simple``, ``flex_simple``,
+        ``fixed_hierarchy``, or ``flex_hierarchy``.
+    fit_model : object
+        Trained workflow object exposing ``workflow``.
+    sim_data : dict[str, np.ndarray]
+        Group-generated simulation payload.
+    base_params : list[str]
+        Public subject parameter names to evaluate.
+    posterior_samples : int
+        Number of posterior samples to draw.
+    n_trials : int, optional
+        Fixed trial count to append for flexible summary workflows.
+    approximator_kwargs : dict, optional
+        Extra keyword arguments forwarded to posterior sampling.
+    sample_batch_size : int, optional
+        Optional sampling batch size for BayesFlow.
+    n_candidates, min_ess, max_candidates, batch_candidates, adaptive
+        Posthoc controls for flexible hierarchical subject recovery.
+    show_progress : bool, optional
+        Whether to print progress from slower recovery routines.
+    n_jobs : int, optional
+        Worker count for flexible hierarchical posthoc recovery.
 
     Returns
     -------
     tuple[pd.DataFrame, pd.DataFrame]
-        Population rows and individual rows.
+        Population recovery rows and individual recovery rows, both labeled
+        with ``fit_model``.
     """
 
-    return _load_pickle(population_rows_path), _load_pickle(individual_rows_path)
+    selected_base_params = _check_param_list(base_params, "base_params")
+    conditions = _model_conditions(
+        fit_name=fit_name,
+        fit_model=fit_model,
+        sim_data=sim_data,
+        n_trials=n_trials,
+    )
+    samples = sample_posterior(
+        workflow=fit_model.workflow,
+        test_data=conditions,
+        num_samples=posterior_samples,
+        approximator_kwargs=approximator_kwargs,
+        sample_batch_size=sample_batch_size,
+    )
+    population_rows = _estimate_population_recovery(
+        fit_name=fit_name,
+        sim_data=sim_data,
+        samples=samples,
+        base_params=selected_base_params,
+    )
+
+    if fit_name in {"fixed_simple", "flex_simple"}:
+        individual_rows = _estimate_simple_subject_recovery(
+            fit_name=fit_name,
+            fit_model=fit_model,
+            sim_data=sim_data,
+            posterior_samples=posterior_samples,
+            base_params=selected_base_params,
+            n_trials=n_trials,
+            approximator_kwargs=approximator_kwargs,
+            sample_batch_size=sample_batch_size,
+        )
+    elif fit_name == "fixed_hierarchy":
+        individual_rows = estimate_fixed_individual_recovery(
+            test_data=sim_data,
+            samples=samples,
+            base_params=selected_base_params,
+        )
+        individual_rows = _label_fit_model(individual_rows, fit_name)
+    elif fit_name == "flex_hierarchy":
+        flex_data = _prepare_flex_subject_recovery_data(
+            fit_model,
+            sim_data,
+            base_params=selected_base_params,
+            n_trials=n_trials,
+        )
+        individual_rows = estimate_flex_individual_recovery(
+            model=fit_model,
+            test_data=flex_data,
+            samples=samples,
+            n_candidates=n_candidates,
+            min_ess=min_ess,
+            max_candidates=max_candidates,
+            batch_candidates=batch_candidates,
+            adaptive=adaptive,
+            base_params=selected_base_params,
+            n_trials=n_trials,
+            show_progress=show_progress,
+            n_jobs=n_jobs,
+        )
+        individual_rows = _label_fit_model(individual_rows, fit_name)
+    else:
+        raise ValueError(
+            "fit_name must be one of fixed_simple, flex_simple, "
+            "fixed_hierarchy, or flex_hierarchy."
+        )
+
+    return population_rows, individual_rows
 
 
-def examine_group_recovery(
+def summarize(
     *,
-    population_rows_path: str | Path,
-    individual_rows_path: str | Path,
-    result_dir: str | Path,
-    artifact_prefix: str = "11_M3",
-    base_params: list[str] | None = None,
-    edge_params: list[str] | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, Path]]:
-    """Compute group-generated population and individual recovery outputs.
+    population_rows: pd.DataFrame,
+    individual_rows: pd.DataFrame,
+    base_params: list[str] | tuple[str, ...],
+    quantile_bias_params: list[str] | tuple[str, ...] | None = None,
+    fit_models: list[str] | None = None,
+) -> dict[str, object]:
+    """Summarize population and individual recovery rows.
 
     Parameters
     ----------
-    population_rows_path : str or Path
-        Pickle path for Step 22 population recovery rows.
-    individual_rows_path : str or Path
-        Pickle path for Step 22 individual recovery rows.
-    result_dir : str or Path
-        Directory to save CSV and plot outputs.
-    artifact_prefix : str, optional
-        File prefix for saved comparison outputs.
-    base_params : list[str], optional
+    population_rows : pd.DataFrame
+        Population recovery rows from one or more fitted models.
+    individual_rows : pd.DataFrame
+        Individual recovery rows from one or more fitted models.
+    base_params : list[str]
         Public subject parameter names shown in plots.
-    edge_params : list[str], optional
+    quantile_bias_params : list[str], optional
         Population parameters used for quantile-bias diagnostics.
+    fit_models : list[str], optional
+        Display order for fit models in plots.
 
     Returns
     -------
-    tuple
-        Population rows, population summary, individual rows, individual
-        correlations, and a dictionary of output paths.
+    dict
+        Summary tables and matplotlib figures.
     """
 
-    population_rows, individual_rows = load_group_recovery_rows(
-        population_rows_path=population_rows_path,
-        individual_rows_path=individual_rows_path,
-    )
+    selected_base_params = _check_param_list(base_params, "base_params")
     validate_recovery_contract(population_rows)
     validate_recovery_contract(individual_rows)
 
@@ -1201,65 +1027,35 @@ def examine_group_recovery(
         population_rows,
         group_cols=["fit_model", "param"],
     )
-    population_diagnostics = summarize_population_recovery_diagnostics(
+    population_diagnostics = _summarize_population_recovery_diagnostics(
         population_rows,
     )
-    selected_edge_params = EDGE_PARAMS if edge_params is None else edge_params
-    edge_param_quantile_bias = summarize_edge_param_quantile_bias(
-        population_rows,
-        params=selected_edge_params,
-    )
-
     individual_correlations = _summarize_recovery_r(
         individual_rows,
         group_cols=["fit_model", "dataset_id", "param"],
     )
 
-    out_dir = Path(result_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    paths = {
-        "population_rows": _save_table(
-            population_rows,
-            out_dir / f"{artifact_prefix}_group_population_recovery_rows.csv",
-        ),
-        "population_summary": _save_table(
-            population_summary,
-            out_dir / f"{artifact_prefix}_group_population_recovery_summary.csv",
-        ),
-        "population_diagnostics": _save_table(
-            population_diagnostics,
-            out_dir / f"{artifact_prefix}_group_population_recovery_diagnostics.csv",
-        ),
-        "edge_param_quantile_bias": _save_table(
-            edge_param_quantile_bias,
-            out_dir / f"{artifact_prefix}_group_edge_param_quantile_bias.csv",
-        ),
-        "individual_rows": _save_table(
-            individual_rows,
-            out_dir / f"{artifact_prefix}_group_individual_recovery_rows.csv",
-        ),
-        "individual_correlations": _save_table(
-            individual_correlations,
-            out_dir / f"{artifact_prefix}_group_individual_recovery_correlations.csv",
-        ),
+    output = {
+        "population_summary": population_summary,
+        "population_diagnostics": population_diagnostics,
+        "individual_correlations": individual_correlations,
     }
+    if quantile_bias_params is not None:
+        output["param_quantile_bias"] = _summarize_param_quantile_bias(
+            population_rows,
+            params=quantile_bias_params,
+        )
 
-    paths["population_plot"] = _plot_group_population_recovery(
+    output["population_figure"] = _plot_group_population_recovery(
         population_rows,
         population_summary,
-        out_dir / f"{artifact_prefix}_group_population_recovery_plot.png",
-        base_params=base_params,
+        base_params=selected_base_params,
+        fit_models=fit_models,
     )
-    paths["individual_plot"] = _plot_group_individual_recovery(
+    output["individual_figure"] = _plot_group_individual_recovery(
         individual_correlations,
-        out_dir / f"{artifact_prefix}_group_individual_recovery_plot.png",
-        base_params=base_params,
+        base_params=selected_base_params,
+        fit_models=fit_models,
     )
 
-    return (
-        population_rows,
-        population_summary,
-        individual_rows,
-        individual_correlations,
-        paths,
-    )
+    return output

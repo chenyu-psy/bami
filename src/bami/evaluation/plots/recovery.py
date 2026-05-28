@@ -11,33 +11,7 @@ import numpy as np
 import pandas as pd
 
 from bami.evaluation.contracts import validate_recovery_contract
-
-
-def _compute_pearson_r(truth: np.ndarray, estimate: np.ndarray) -> float:
-    """Compute Pearson correlation with basic safety checks.
-
-    Parameters
-    ----------
-    truth
-        Ground-truth values.
-    estimate
-        Estimated values aligned with ``truth``.
-
-    Returns
-    -------
-    float
-        Correlation coefficient or NaN when undefined.
-    """
-
-    x = np.asarray(truth, dtype=float).reshape(-1)
-    y = np.asarray(estimate, dtype=float).reshape(-1)
-    if x.shape[0] != y.shape[0]:
-        raise ValueError("truth and estimate must have matching lengths.")
-    if x.shape[0] < 2:
-        return float("nan")
-    if np.std(x) == 0.0 or np.std(y) == 0.0:
-        return float("nan")
-    return float(np.corrcoef(x, y)[0, 1])
+from bami.evaluation.metrics import compute_corr
 
 
 def _select_plot_pars(df: pd.DataFrame, pars: list[str] | None) -> list[str]:
@@ -117,7 +91,7 @@ def _plot_recovery_panel(
     hi = max(x.max(), y.max())
     ax.plot([lo, hi], [lo, hi], linestyle="--", linewidth=1.0)
 
-    corr = _compute_pearson_r(x, y)
+    corr = compute_corr(x, y)
     ax.set_title(f"{title} (r={corr:.3f})")
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
@@ -236,7 +210,7 @@ def _dataset_recovery_correlations(
     for param in selected_pars:
         param_df = level_df[level_df["param"].astype(str) == param]
         for dataset_id, dataset_df in param_df.groupby("dataset_id", sort=True):
-            r_val = _compute_pearson_r(
+            r_val = compute_corr(
                 dataset_df["true_value"].to_numpy(dtype=float),
                 dataset_df["est_value"].to_numpy(dtype=float),
             )
@@ -318,7 +292,7 @@ def _trial_recovery_correlations(
         for param in selected_pars:
             param_df = trial_df[trial_df["param"].astype(str) == param]
             for dataset_id, dataset_df in param_df.groupby("dataset_id", sort=True):
-                r_val = _compute_pearson_r(
+                r_val = compute_corr(
                     dataset_df["true_value"].to_numpy(dtype=float),
                     dataset_df["est_value"].to_numpy(dtype=float),
                 )
