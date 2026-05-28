@@ -647,11 +647,8 @@ def test_flex_individual_recovery_keeps_posthoc_diagnostics():
 
             return {"dummy_group": np.zeros((1, num_samples), dtype=np.float32)}
 
-    class DummyFlexModel:
-        """Minimal model exposing workflow and estimate_subjects."""
-
-        def __init__(self):
-            self.workflow = DummyFlexWorkflow()
+    class DummyPosthocEstimator:
+        """Return one posthoc estimate with diagnostics."""
 
         def estimate_subjects(self, counts, **kwargs):
             """Return one posthoc estimate with diagnostics."""
@@ -671,6 +668,14 @@ def test_flex_individual_recovery_keeps_posthoc_diagnostics():
                     "posthoc_status": ["low_ess"],
                 }
             )
+
+    class DummyFlexModel:
+        """Minimal model exposing workflow and posthoc estimator settings."""
+
+        def __init__(self):
+            self.workflow = DummyFlexWorkflow()
+            self.posthoc_estimator = DummyPosthocEstimator
+            self.posthoc_kwargs = {}
 
     df = bf_flex_ind_recovery(
         model=DummyFlexModel(),
@@ -710,11 +715,8 @@ def test_flex_posthoc_helper_matches_public_recovery():
 
             return {"dummy_group": np.zeros((1, num_samples), dtype=np.float32)}
 
-    class DummyFlexModel:
-        """Minimal model exposing workflow and estimate_subjects."""
-
-        def __init__(self):
-            self.workflow = DummyFlexWorkflow()
+    class DummyPosthocEstimator:
+        """Return one posthoc estimate with diagnostics."""
 
         def estimate_subjects(self, counts, **kwargs):
             """Return one posthoc estimate with diagnostics."""
@@ -734,6 +736,14 @@ def test_flex_posthoc_helper_matches_public_recovery():
                     "posthoc_status": ["ok"],
                 }
             )
+
+    class DummyFlexModel:
+        """Minimal model exposing workflow and posthoc estimator settings."""
+
+        def __init__(self):
+            self.workflow = DummyFlexWorkflow()
+            self.posthoc_estimator = DummyPosthocEstimator
+            self.posthoc_kwargs = {}
 
     model = DummyFlexModel()
     test = model.workflow.simulate(1)
@@ -762,16 +772,18 @@ def test_flex_posthoc_helper_matches_public_recovery():
 def test_flex_posthoc_uses_raw_counts_when_data_is_normalized():
     """Posthoc recovery should accept normalized summary data plus raw counts."""
 
-    class DummyFlexModel:
-        """Minimal model recording the counts passed to posthoc estimation."""
+    class DummyPosthocEstimator:
+        """Record counts and return one parameter estimate."""
 
-        def __init__(self):
-            self.seen_counts = None
+        def __init__(self, parent):
+            """Store the test model so counts can be inspected."""
+
+            self.parent = parent
 
         def estimate_subjects(self, counts, **kwargs):
             """Record counts and return one parameter estimate."""
 
-            self.seen_counts = np.asarray(counts)
+            self.parent.seen_counts = np.asarray(counts)
             return pd.DataFrame(
                 {
                     "subject_id": [0],
@@ -787,6 +799,14 @@ def test_flex_posthoc_uses_raw_counts_when_data_is_normalized():
                     "posthoc_status": ["ok"],
                 }
             )
+
+    class DummyFlexModel:
+        """Minimal model exposing posthoc estimator settings."""
+
+        def __init__(self):
+            self.seen_counts = None
+            self.posthoc_estimator = DummyPosthocEstimator
+            self.posthoc_kwargs = {"parent": self}
 
     data = np.zeros((1, 1, 7), dtype=np.float32)
     data[0, 0, :5] = np.array([0.4, 0.2, 0.2, 0.0, 0.2], dtype=np.float32)
@@ -886,11 +906,8 @@ def test_flex_individual_recovery_prints_progress_messages(capsys):
 
             return {"dummy_group": np.zeros((1, num_samples), dtype=np.float32)}
 
-    class DummyFlexModel:
-        """Minimal flex model for progress tests."""
-
-        def __init__(self):
-            self.workflow = DummyFlexWorkflow()
+    class DummyPosthocEstimator:
+        """Return one posthoc estimate with diagnostics."""
 
         def estimate_subjects(self, counts, **kwargs):
             """Return one posthoc estimate with diagnostics."""
@@ -910,6 +927,14 @@ def test_flex_individual_recovery_prints_progress_messages(capsys):
                     "posthoc_status": ["ok"],
                 }
             )
+
+    class DummyFlexModel:
+        """Minimal flex model for progress tests."""
+
+        def __init__(self):
+            self.workflow = DummyFlexWorkflow()
+            self.posthoc_estimator = DummyPosthocEstimator
+            self.posthoc_kwargs = {}
 
     bf_flex_ind_recovery(
         model=DummyFlexModel(),
@@ -952,12 +977,8 @@ def test_flex_individual_recovery_can_override_simulated_trial_count():
 
             return {"dummy_group": np.zeros((1, num_samples), dtype=np.float32)}
 
-    class TrialAwareModel:
-        """Minimal model with a mutable trial range."""
-
-        def __init__(self):
-            self.n_trials_range = (5, 9)
-            self.workflow = TrialAwareWorkflow(self)
+    class DummyPosthocEstimator:
+        """Return one posthoc estimate with diagnostics."""
 
         def estimate_subjects(self, counts, **kwargs):
             """Return one posthoc estimate with diagnostics."""
@@ -977,6 +998,15 @@ def test_flex_individual_recovery_can_override_simulated_trial_count():
                     "posthoc_status": ["ok"],
                 }
             )
+
+    class TrialAwareModel:
+        """Minimal model with a mutable trial range."""
+
+        def __init__(self):
+            self.n_trials_range = (5, 9)
+            self.workflow = TrialAwareWorkflow(self)
+            self.posthoc_estimator = DummyPosthocEstimator
+            self.posthoc_kwargs = {}
 
     model = TrialAwareModel()
     df = bf_flex_ind_recovery(

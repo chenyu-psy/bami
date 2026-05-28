@@ -72,7 +72,7 @@ def test_ezdm_fixed_simple_transform_returns_public_parameters():
         raw_key("t0"): np.array([[np.log(0.25), np.log(0.35)]]),
     }
 
-    out = model.transform_posterior_samples(samples)
+    out = model.convert_posterior(samples)
 
     expected_v = apply_link(samples[raw_key("v")], EZDM_SPEC["priors"]["v"]["link"])
     assert np.array_equal(out["v"], expected_v)

@@ -33,10 +33,10 @@ def fit_workflow(
     Parameters
     ----------
     model
-        Configured workflow object. The object must expose ``dynamic_fit`` and,
-        when ``file`` is supplied, ``workflow.approximator``.
+        Configured workflow object. The object must expose ``train_workflow``
+        and, when ``file`` is supplied, ``workflow.approximator``.
     max_epochs, initial_epochs, n_batch, batch_size, validation_data, patience, min_delta
-        Training control values passed to ``dynamic_fit``.
+        Training control values passed to ``train_workflow``.
     workers
         Number of Keras data-loading workers for online simulation batches.
     max_queue_size
@@ -75,7 +75,7 @@ def fit_workflow(
             print(f"Loaded workflow weights: {checkpoint_path}", flush=True)
             return {"loaded": True, "file": checkpoint_path}
 
-    history = model.dynamic_fit(
+    history = model.train_workflow(
         max_epochs=max_epochs,
         initial_epochs=initial_epochs,
         n_batch=n_batch,

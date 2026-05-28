@@ -552,8 +552,7 @@ class HierarchicalWorkflow:
         Optional input-format helper. If supplied, it formats
         simulator rows and trial counts before padding and masking.
     posthoc_estimator
-        Optional estimator class exposing ``estimate_subjects`` for posthoc
-        individual recovery.
+        Optional estimator class for posthoc subject-level posterior summaries.
     summary_dim, n_coupling_layers
         BayesFlow network settings.
     transform_samples
@@ -562,7 +561,7 @@ class HierarchicalWorkflow:
     Returns
     -------
     None
-        The initialized object exposes ``workflow`` and ``dynamic_fit``.
+        The initialized object exposes ``workflow`` and ``train_workflow``.
     """
 
     workflow_level = "hierarchical"
@@ -1178,7 +1177,7 @@ class HierarchicalWorkflow:
             inference_conditions=None,
             summary_variables=["data"],
         )
-        self.workflow.transform_posterior_samples = self.transform_posterior_samples
+        self.workflow.transform_posterior_samples = self.convert_posterior
         self.workflow.workflow_level = self.workflow_level
         self.workflow.workflow_family = self.workflow_family
         self.workflow.subject_design = self.subject_design
@@ -1227,7 +1226,7 @@ class HierarchicalWorkflow:
             ),
         )
 
-    def transform_posterior_samples(self, samples: dict) -> dict:
+    def convert_posterior(self, samples: dict) -> dict:
         """Transform posterior samples when a transform function is supplied.
 
         Parameters
@@ -1246,7 +1245,7 @@ class HierarchicalWorkflow:
             return samples
         return self._transform_samples(samples, self.priors)
 
-    def counts_to_data(self, counts) -> tuple[np.ndarray, list]:
+    def _prepare_observed_counts(self, counts) -> tuple[np.ndarray, list]:
         """Convert subject count rows to padded hierarchy summary data.
 
         Parameters
@@ -1323,25 +1322,6 @@ class HierarchicalWorkflow:
             raise ValueError("This workflow does not define a posthoc estimator.")
         return self.posthoc_estimator(**self.posthoc_kwargs)
 
-    def estimate_subjects(self, counts, **kwargs):
-        """Estimate subject-level parameters with the configured posthoc helper.
-
-        Parameters
-        ----------
-        counts
-            Subject-by-count matrix or dataframe accepted by the estimator.
-        **kwargs
-            Estimation settings passed to the posthoc estimator.
-
-        Returns
-        -------
-        pandas.DataFrame
-            Long table of subject-level parameter estimates.
-        """
-
-        estimator = self.build_posthoc_estimator()
-        return estimator.estimate_subjects(counts, **kwargs)
-
     def _input_format_metadata(self) -> dict | None:
         """Return JSON-safe input-format metadata for this workflow.
 
@@ -1355,7 +1335,7 @@ class HierarchicalWorkflow:
             return None
         return self.input_format.to_dict()
 
-    def dynamic_fit(
+    def train_workflow(
         self,
         max_epochs=100,
         initial_epochs=10,
@@ -1389,7 +1369,7 @@ class HierarchicalWorkflow:
 
         # The training loop is shared with SimpleWorkflow so notebook behavior
         # stays the same across simple and hierarchical workflows.
-        return SimpleWorkflow.dynamic_fit(
+        return SimpleWorkflow.train_workflow(
             self,
             max_epochs=max_epochs,
             initial_epochs=initial_epochs,

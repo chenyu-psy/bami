@@ -12,6 +12,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
+
 def simulate_m3_custom(
     n_trials: int,
     activation_fn,

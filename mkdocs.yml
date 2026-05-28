@@ -22,8 +22,7 @@ nav:
   - API Reference:
       - Package index: api/index.md
       - Workflows:
-          - SimpleWorkflow: api/workflows/simple.md
-          - HierarchicalWorkflow: api/workflows/hierarchical.md
+          - Workflow classes: api/workflows.md
       - Inputs:
           - Input formats: api/inputs/formats.md
       - Simulators:
@@ -32,12 +31,14 @@ nav:
           - M3: api/simulators/m3.md
       - Training:
           - fit_workflow: api/training/fit-workflow.md
+      - Parameters:
+          - Population and individual parameters: api/parameters.md
       - Evaluation:
           - Metrics: api/evaluation/metrics.md
           - Plots and table contracts: api/evaluation/plots-contracts.md
       - Recovery:
           - Recovery workflows: api/recovery.md
-      - Advanced inference:
+      - Inference:
           - Prior utilities: api/inference/priors-transforms.md
           - Likelihood distributions: api/inference/distributions.md
           - Checkpoints and runtime: api/inference/checkpoints-runtime.md

@@ -96,7 +96,7 @@ def _flex_conditions_from_counts(
     flex_batches = []
     for dataset_counts in data:
         input_rows = _append_n_trials_if_needed(flex_model, dataset_counts, n_trials)
-        flex_data, _ = flex_model.counts_to_data(input_rows)
+        flex_data, _ = flex_model._prepare_observed_counts(input_rows)
         flex_batches.append(flex_data[0])
     return {"data": np.stack(flex_batches, axis=0)}
 
@@ -132,7 +132,7 @@ def _flex_simple_conditions_from_counts(
     flex_batches = []
     for dataset_counts in data:
         input_rows = _append_n_trials_if_needed(flex_model, dataset_counts, n_trials)
-        flex_data, _ = flex_model.counts_to_data(input_rows)
+        flex_data, _ = flex_model._prepare_observed_counts(input_rows)
         flex_batches.append(flex_data[0])
     return {"data": np.stack(flex_batches, axis=0)}
 

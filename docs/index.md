@@ -146,6 +146,5 @@ the exact arguments for a function or workflow.
 <div class="bami-link-list">
   <a href="examples/simple-sdm/">Simple SDM workflow</a>
   <a href="examples/hierarchical-ezdm/">Hierarchical ezDM workflow</a>
-  <a href="api/workflows/simple/">SimpleWorkflow reference</a>
-  <a href="api/workflows/hierarchical/">HierarchicalWorkflow reference</a>
+  <a href="api/workflows/">Workflow reference</a>
 </div>

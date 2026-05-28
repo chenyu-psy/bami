@@ -20,6 +20,7 @@ from bami.evaluation.contracts import (
     validate_diagnostic_contract,
     validate_recovery_contract,
 )
+from bami.inference import summarize_subject_posterior
 
 _M3_POSTHOC_WORKER_STATE: dict[str, object] = {}
 
@@ -151,7 +152,7 @@ def _estimate_one_flex_dataset(
     Parameters
     ----------
     model
-        Hierarchy model exposing ``estimate_subjects``.
+        Hierarchy model configured for posthoc subject posterior summaries.
     test
         Simulated data dictionary containing subject-level truth arrays.
     samples
@@ -163,7 +164,7 @@ def _estimate_one_flex_dataset(
     dataset_id
         Index of the simulated dataset to estimate.
     n_candidates, min_ess, max_candidates, batch_candidates, adaptive
-        Posthoc candidate controls passed to ``model.estimate_subjects``.
+        Posthoc candidate controls passed to ``summarize_subject_posterior``.
     base_params
         Individual parameter names to include in the recovery table.
     n_trials
@@ -189,7 +190,8 @@ def _estimate_one_flex_dataset(
         key: np.asarray(val)[dataset_id : dataset_id + 1]
         for key, val in samples.items()
     }
-    estimates = model.estimate_subjects(
+    estimates = summarize_subject_posterior(
+        model,
         counts,
         group_samples=one_dataset_samples,
         n_candidates=n_candidates,
@@ -266,7 +268,7 @@ def _init_m3_posthoc_worker(
     test, samples, data
         Recovery inputs shared by all dataset tasks in the worker process.
     n_candidates, min_ess, max_candidates, batch_candidates, adaptive
-        Posthoc controls passed to ``estimate_subjects``.
+        Posthoc controls passed to the worker-local estimator.
     base_params
         Individual parameter names to include in the recovery table.
     n_trials
@@ -365,7 +367,7 @@ def _estimate_m3_datasets_process_safe(
     n_jobs
         Positive number of workers.
     n_candidates, min_ess, max_candidates, batch_candidates, adaptive
-        Posthoc candidate controls passed to ``model.estimate_subjects``.
+        Posthoc candidate controls passed to ``summarize_subject_posterior``.
     base_params
         Individual parameter names to include in the recovery table.
     n_trials
@@ -446,7 +448,7 @@ def _estimate_flex_datasets_parallel(
     n_jobs
         Positive number of workers.
     n_candidates, min_ess, max_candidates, batch_candidates, adaptive
-        Posthoc controls passed to ``model.estimate_subjects``.
+        Posthoc controls passed to ``summarize_subject_posterior``.
     base_params
         Individual parameter names to include in the recovery table.
     n_trials
@@ -662,8 +664,8 @@ def _simple_subject_conditions(model, test_data: Mapping[str, np.ndarray]) -> di
 
     n_datasets, n_subjects, n_categories = data.shape
     flat_counts = data.reshape(n_datasets * n_subjects, 1, n_categories)
-    if hasattr(model, "counts_to_data"):
-        conditions, _ = model.counts_to_data(flat_counts)
+    if hasattr(model, "_prepare_observed_counts"):
+        conditions, _ = model._prepare_observed_counts(flat_counts)
         return {"data": conditions}
     return {"data": flat_counts}
 
@@ -986,13 +988,13 @@ def estimate_flex_individual_recovery(
     Parameters
     ----------
     model
-        Hierarchy model exposing ``estimate_subjects``.
+        Hierarchy model configured for posthoc subject posterior summaries.
     test_data
         Flex-formatted data and subject-level truth arrays.
     samples
         Group posterior samples for all datasets.
     n_candidates, min_ess, max_candidates, batch_candidates, adaptive
-        Posthoc candidate controls passed to ``model.estimate_subjects``.
+        Posthoc candidate controls passed to ``summarize_subject_posterior``.
     base_params
         Base individual parameters to include.
     n_trials
@@ -1317,7 +1319,8 @@ def bf_flex_ind_recovery(
     Parameters
     ----------
     model
-        Flexible hierarchy model exposing ``workflow`` and ``estimate_subjects``.
+        Flexible hierarchy model exposing ``workflow`` and posthoc estimator
+        settings.
     test_data
         Simulated flex-hierarchy data dictionary or number of datasets to
         simulate from ``model.workflow``.

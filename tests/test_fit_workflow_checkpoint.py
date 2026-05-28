@@ -27,13 +27,13 @@ class _ToyTrainModel:
     """Minimal model object exposing the fit_workflow interface."""
 
     def __init__(self):
-        """Create a fake model and record dynamic_fit calls."""
+        """Create a fake model and record train_workflow calls."""
 
         self.workflow = _ToyTrainWorkflow()
         self.fit_kwargs = None
         self.fit_count = 0
 
-    def dynamic_fit(self, **kwargs):
+    def train_workflow(self, **kwargs):
         """Record training settings and return a fake history."""
 
         self.fit_count += 1

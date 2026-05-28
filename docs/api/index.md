@@ -7,11 +7,8 @@ analysis where they are usually used.
 
 Start here when building a BayesFlow workflow around a simulator.
 
-[`SimpleWorkflow`](workflows/simple.md)
-: Build a non-hierarchical workflow where one prior draw generates one dataset.
-
-[`HierarchicalWorkflow`](workflows/hierarchical.md)
-: Build a group-level workflow where each simulated dataset contains multiple subjects.
+[`SimpleWorkflow` and `HierarchicalWorkflow`](workflows.md)
+: Build non-hierarchical or group-level workflows around a simulator.
 
 ## Inputs
 
@@ -48,16 +45,24 @@ training settings and optional checkpoint loading or saving.
 [`fit_workflow`](training/fit-workflow.md)
 : Fit a workflow and optionally reuse or save a `.keras` checkpoint.
 
+## Parameters
+
+Use these functions after training when you want population-level or
+individual-level parameter estimates.
+
+[`sample_posterior`](parameters.md)
+: Sample population or group-level posterior draws and apply public-scale
+parameter transforms when available.
+
+[`summarize_subject_posterior`](parameters.md)
+: Summarize individual-level parameter posteriors from observed subject counts.
+
 ## Evaluation
 
-Use these functions after training to turn posterior samples into recovery and
-diagnostic tables.
+Use these functions to check recovery, diagnostics, and model performance.
 
 [`compute_corr`, `compute_ccc`, and `compute_rmse`](evaluation/metrics.md)
 : Compute scalar agreement and error metrics for true vs. estimated values.
-
-[`sample_posterior`](evaluation/metrics.md)
-: Sample posterior draws and apply public-space transforms when available.
 
 [`estimate_population_recovery`](evaluation/metrics.md)
 : Convert posterior samples into population-level recovery rows.

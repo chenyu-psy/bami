@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from fixtures_model_specs import M3_SPEC, m3_activation
-from bami.inference import transform_hierarchical_samples
+from bami.inference import summarize_subject_posterior, transform_hierarchical_samples
 from bami.inference.posthoc import M3PosthocEstimator
 from bami.inference.priors import log_sigma_key, mu_raw_key
 from bami.simulators.m3 import prop_m3, simulate_m3_custom
@@ -113,7 +113,7 @@ def test_flex_normalized_input_keeps_shape_and_scales_counts():
     model = _build_small_model(normalize_counts=True)
     counts = np.array([[2, 1, 1, 0, 1]], dtype=np.float32)
 
-    data, subject_ids = model.counts_to_data(counts)
+    data, subject_ids = model._prepare_observed_counts(counts)
 
     assert data.shape == (1, 4, 7)
     assert subject_ids == [0]
@@ -181,7 +181,8 @@ def test_posthoc_estimator_returns_one_row_per_subject_and_param():
             dtype=np.float32,
         )
 
-    out = model.estimate_subjects(
+    out = summarize_subject_posterior(
+        model,
         counts,
         group_samples=group_samples,
         n_candidates=60,
@@ -217,7 +218,8 @@ def test_posthoc_adaptive_adds_candidates_when_ess_is_low():
             dtype=np.float32,
         )
 
-    out = model.estimate_subjects(
+    out = summarize_subject_posterior(
+        model,
         counts,
         group_samples=group_samples,
         n_candidates=5,
@@ -245,7 +247,8 @@ def test_posthoc_can_disable_adaptive_candidate_growth():
             dtype=np.float32,
         )
 
-    out = model.estimate_subjects(
+    out = summarize_subject_posterior(
+        model,
         counts,
         group_samples=group_samples,
         n_candidates=5,
@@ -280,7 +283,8 @@ def test_posthoc_estimator_handles_arbitrary_log_sigma_draws():
             dtype=np.float32,
         ).reshape(1, -1)
 
-    out = model.estimate_subjects(
+    out = summarize_subject_posterior(
+        model,
         counts,
         group_samples=group_samples,
         n_candidates=40,

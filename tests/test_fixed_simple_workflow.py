@@ -163,7 +163,7 @@ def test_fixed_simple_workflow_transforms_public_parameters():
     model = _build_toy_workflow()
     samples = {raw_key("theta"): np.array([[-1.0, 1.0]])}
 
-    out = model.transform_posterior_samples(samples)
+    out = model.convert_posterior(samples)
 
     assert np.array_equal(out["theta"], samples[raw_key("theta")])
 
@@ -358,7 +358,9 @@ def test_simple_workflow_input_format_encodes_flex_summary_n():
 
     sim = model.workflow.simulate(12)
     encoded_n = sim["data"][:, :, -1]
-    manual_data, _ = model.counts_to_data(np.array([[0.5, 5.0]], dtype=np.float32))
+    manual_data, _ = model._prepare_observed_counts(
+        np.array([[0.5, 5.0]], dtype=np.float32)
+    )
 
     assert sim["data"].shape == (12, 1, 2)
     assert np.all(encoded_n >= -1.0)
@@ -695,7 +697,7 @@ def test_hierarchical_workflow_input_format_encodes_subject_summary_n():
     )
 
     sim = model.workflow.simulate(6)
-    manual_data, _ = model.counts_to_data(
+    manual_data, _ = model._prepare_observed_counts(
         np.array([[0.2, 10.0], [0.4, 14.0]], dtype=np.float32)
     )
 

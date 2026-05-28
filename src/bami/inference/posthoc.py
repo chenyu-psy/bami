@@ -25,7 +25,50 @@ from bami.inference.priors import (
 RESPONSE_COLUMNS = ["correct", "other", "dist", "other_dist", "new"]
 BASE_PARAMS = ["a", "c", "ra", "rc"]
 
-__all__ = ["M3PosthocEstimator", "PosthocResult", "PosthocSampler"]
+__all__ = [
+    "M3PosthocEstimator",
+    "PosthocResult",
+    "PosthocSampler",
+    "summarize_subject_posterior",
+]
+
+
+def summarize_subject_posterior(model, counts, **kwargs):
+    """Summarize subject-level posterior estimates from observed counts.
+
+    Parameters
+    ----------
+    model
+        Hierarchical workflow configured with ``posthoc_estimator`` and
+        ``posthoc_kwargs``, or a workflow-free estimator exposing
+        ``estimate_subjects``.
+    counts
+        Subject-by-count matrix or dataframe accepted by the model's posthoc
+        estimator.
+    **kwargs
+        Estimation settings passed to the posthoc estimator, such as
+        ``group_samples``, ``n_candidates``, and adaptive ESS controls.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Long table with one posterior summary row per subject and parameter.
+    """
+
+    direct_estimator = getattr(model, "estimate_subjects", None)
+    if callable(direct_estimator):
+        return direct_estimator(counts, **kwargs)
+
+    estimator_cls = getattr(model, "posthoc_estimator", None)
+    if estimator_cls is None:
+        raise ValueError("model must define posthoc_estimator.")
+
+    estimator_kwargs = getattr(model, "posthoc_kwargs", None)
+    if estimator_kwargs is None:
+        raise ValueError("model must define posthoc_kwargs.")
+
+    estimator = estimator_cls(**estimator_kwargs)
+    return estimator.estimate_subjects(counts, **kwargs)
 
 
 class M3PosthocEstimator:

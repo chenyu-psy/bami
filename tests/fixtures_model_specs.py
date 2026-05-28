@@ -46,6 +46,7 @@ def m3_activation(a, c, ra, rc, b=0):
         b,
     ]
 
+
 EZDM_SPEC = {
     "model_name": "ezDM",
     "priors": {

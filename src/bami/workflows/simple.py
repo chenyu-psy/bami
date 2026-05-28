@@ -69,7 +69,7 @@ class SimpleWorkflow:
     Returns
     -------
     None
-        The initialized object exposes ``workflow`` and ``dynamic_fit``.
+        The initialized object exposes ``workflow`` and ``train_workflow``.
     """
 
     workflow_level = "simple"
@@ -376,7 +376,7 @@ class SimpleWorkflow:
             inference_conditions=None,
             summary_variables=["data"],
         )
-        self.workflow.transform_posterior_samples = self.transform_posterior_samples
+        self.workflow.transform_posterior_samples = self.convert_posterior
         self.workflow.workflow_level = self.workflow_level
         self.workflow.workflow_family = self.workflow_family
         self.workflow.trial_design = self.trial_design
@@ -560,7 +560,7 @@ class SimpleWorkflow:
         data[:n_trials, self.data_width] = 1.0
         return data
 
-    def counts_to_data(self, counts) -> tuple[np.ndarray, list]:
+    def _prepare_observed_counts(self, counts) -> tuple[np.ndarray, list]:
         """Convert simple count rows to BayesFlow summary data.
 
         Parameters
@@ -576,7 +576,9 @@ class SimpleWorkflow:
         """
 
         if self.observation != "aggregate":
-            raise ValueError("counts_to_data is only available for aggregate data.")
+            raise ValueError(
+                "_prepare_observed_counts is only available for aggregate data."
+            )
         arr = np.asarray(counts, dtype=np.float32)
         row_ids = list(range(arr.shape[0])) if arr.ndim >= 2 else [0]
         if self.input_format is not None and self.input_format.add_n:
@@ -612,7 +614,7 @@ class SimpleWorkflow:
             arr = arr[np.newaxis, :, :]
         return arr.astype(np.float32), row_ids
 
-    def transform_posterior_samples(self, samples: dict) -> dict:
+    def convert_posterior(self, samples: dict) -> dict:
         """Transform raw posterior samples to public parameter keys.
 
         Parameters
@@ -632,7 +634,7 @@ class SimpleWorkflow:
 
         return transform_simple_samples(samples, self.priors)
 
-    def dynamic_fit(
+    def train_workflow(
         self,
         max_epochs=100,
         initial_epochs=10,
