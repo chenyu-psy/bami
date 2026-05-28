@@ -68,9 +68,9 @@ SDM_SPEC = {
         "kappa": {"mean": "normal(1.2, 0.35)", "sd": 0.15, "link": "log"},
     },
     "trial_contract": {
-        "names": ["error"],
-        "order": ["error"],
-        "unit": "signed degrees",
-        "range": "[-180, 180)",
+        "names": ["error_rad"],
+        "order": ["error_rad"],
+        "unit": "radians",
+        "range": "[-pi, pi]",
     },
 }

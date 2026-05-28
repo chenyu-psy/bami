@@ -1,12 +1,13 @@
 # Simple SDM workflow
 
 This example builds a simple, non-hierarchical SDM workflow. Each prior draw
-generates one dataset with a fixed number of trial-level circular errors.
+generates one dataset with a fixed number of trial-level circular errors in
+radians.
 
 ```python
 import numpy as np
 
-from bami.simulators import GRID_SIZE, simulate_sdm_simple
+from bami.simulators import simulate_sdm_simple
 from bami.workflows import SimpleWorkflow
 
 
@@ -21,8 +22,7 @@ model = SimpleWorkflow(
     },
     simulator=simulate_sdm_simple,
     observation="trial",
-    simulator_kwargs={"grid_size": GRID_SIZE, "error_scale": 180.0},
-    obs_names=["error"],
+    obs_names=["error_rad"],
     n_trials=25,
     summary_dim=4,
     n_coupling_layers=2,
@@ -42,11 +42,11 @@ The dimensions mean:
 
 - `5` simulated datasets
 - `25` trial rows per dataset
-- `1` observation feature per trial: signed circular error
+- `1` observation feature per trial: signed circular error in radians
 
-The SDM simulator returns signed circular errors. In this example,
-`error_scale=180.0` stores those errors on an approximately unit-scaled range,
-which is easier for the neural network than raw degrees.
+The SDM simulator returns continuous signed circular errors in `[-pi, pi]`.
+Observed SDM data should use the same radian convention before being passed to
+a workflow.
 
 ## Flexible trial counts
 
@@ -62,8 +62,7 @@ model = SimpleWorkflow(
     },
     simulator=simulate_sdm_simple,
     observation="trial",
-    simulator_kwargs={"grid_size": GRID_SIZE, "error_scale": 180.0},
-    obs_names=["error"],
+    obs_names=["error_rad"],
     n_trials=None,
     n_trials_range=(20, 31),
     summary_dim=4,

@@ -58,7 +58,7 @@ The examples in this site focus on the first three steps so the workflow shape
 is easy to inspect before starting longer training runs.
 
 ```python
-from bami.simulators import GRID_SIZE, simulate_sdm_simple
+from bami.simulators import simulate_sdm_simple
 from bami.workflows import SimpleWorkflow
 
 
@@ -71,8 +71,7 @@ model = SimpleWorkflow(
     },
     simulator=simulate_sdm_simple,
     observation="trial",
-    simulator_kwargs={"grid_size": GRID_SIZE, "error_scale": 180.0},
-    obs_names=["error"],
+    obs_names=["error_rad"],
     n_trials=25,
 )
 

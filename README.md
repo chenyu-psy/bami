@@ -45,11 +45,11 @@ pip install "bami @ git+https://github.com/chenyu-psy/bami.git"
 ## Quick start: a simple SDM workflow
 
 The example below builds a standard SDM workflow for trial-level circular
-errors. The simulator returns one signed error per trial. The workflow then
-learns to infer the SDM parameters `c` and `kappa` from those trial rows.
+errors. The simulator returns one signed radian error per trial. The workflow
+then learns to infer the SDM parameters `c` and `kappa` from those trial rows.
 
 ```python
-from bami.simulators import GRID_SIZE, simulate_sdm_simple
+from bami.simulators import simulate_sdm_simple
 from bami.workflows import SimpleWorkflow
 
 
@@ -62,8 +62,7 @@ model = SimpleWorkflow(
     },
     simulator=simulate_sdm_simple,
     observation="trial",
-    simulator_kwargs={"grid_size": GRID_SIZE, "error_scale": 180.0},
-    obs_names=["error"],
+    obs_names=["error_rad"],
     n_trials=25,
 )
 
@@ -81,7 +80,7 @@ This means:
 
 - `4` simulated datasets
 - `25` trial rows per dataset
-- `1` observation feature per trial: the signed circular error
+- `1` observation feature per trial: the signed circular error in radians
 
 ## Core concepts
 
@@ -103,8 +102,8 @@ For `observation="trial"`, return one row per trial. This is useful when the
 trial sequence itself should be summarized by the neural network.
 
 For SDM trial-level workflows, `simulate_sdm_simple()` returns signed circular
-errors. Passing `error_scale=180.0` stores the errors on an approximately
-unit-scaled range, which is easier for the neural network than raw degrees.
+errors in radians. User-provided SDM data should use the same convention, with
+one trial row containing one error in `[-pi, pi]`.
 
 ### Priors
 

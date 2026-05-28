@@ -209,25 +209,18 @@ def test_sdm_error_simulator_returns_trial_level_errors():
 
     assert np.array_equal(first, second)
     assert first.shape == (40, 1)
-    assert np.all(first >= -180)
-    assert np.all(first < 180)
+    assert np.all(first >= -np.pi)
+    assert np.all(first <= np.pi)
     assert not np.allclose(first, np.round(first))
 
 
-def test_sdm_error_simulator_can_return_scaled_errors():
-    """SDM error simulation should support unit-scaled neural-network inputs."""
+def test_sdm_error_simulator_rejects_invalid_parameters():
+    """SDM error simulation should reject impossible public parameters."""
 
-    out = simulate_sdm_simple(
-        c=3.0,
-        kappa=4.0,
-        n_trials=40,
-        error_scale=180,
-        rng=np.random.default_rng(2026),
-    )
-
-    assert out.shape == (40, 1)
-    assert np.all(out >= -1)
-    assert np.all(out < 1)
+    with pytest.raises(ValueError, match="c"):
+        simulate_sdm_simple(c=0.0, kappa=4.0, n_trials=10)
+    with pytest.raises(ValueError, match="kappa"):
+        simulate_sdm_simple(c=3.0, kappa=0.0, n_trials=10)
 
 
 def test_ezdm_simulator_returns_reproducible_summary():

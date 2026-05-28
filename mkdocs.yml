@@ -26,7 +26,7 @@ nav:
       - Inputs:
           - Input formats: api/inputs/formats.md
       - Simulators:
-          - SDM and circular helpers: api/simulators/sdm-circular.md
+          - SDM: api/simulators/sdm-circular.md
           - ezDM: api/simulators/ezdm.md
           - M3: api/simulators/m3.md
       - Training:

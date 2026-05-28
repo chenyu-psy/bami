@@ -146,6 +146,29 @@ code review and website polish milestone is complete.
 
 ## Completed Work
 
+### Workflow and Simulator Website Polish
+
+Completed.
+
+- Reorganized the workflow reference so researchers first see workflow choice,
+  setup order, prior structure, and minimal examples before constructor
+  details.
+- Added clearer prior documentation for the current `mean` / `sd` / `link`
+  format, including fixed simulator constants and supported link functions.
+- Simplified the SDM simulator API around continuous signed circular errors in
+  radians: `simulate_sdm_simple(c, kappa, n_trials=100, rng=None)`.
+- Removed the old SDM degree-bin user interface, including `GRID_SIZE`,
+  `grid_size`, `error_scale`, `jitter`, `sdm_probs`, and degree/index helper
+  exports.
+- Updated SDM examples and fixtures to use `obs_names=["error_rad"]`, with
+  simulated and observed SDM data documented as radians in `[-pi, pi]`.
+- Aligned simulator navigation with the M3 and ezDM pages by exposing SDM as
+  `SDM` and featuring only the workflow-facing simulator function.
+- Full `uv run pytest` passed with the existing Keras/Torch NumPy deprecation
+  warnings only.
+- `uv run mkdocs build` passed with the upstream Material for MkDocs 2.0
+  warning only.
+
 ### BayesFlow 2.0.12 Compatibility
 
 Completed.
