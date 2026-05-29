@@ -95,13 +95,16 @@ code review and website polish milestone is complete.
 - Keep the package organized by responsibility: `workflows`, `parameters`,
   `evaluation`, `inference`, `simulators`, `inputs`, and `recovery`.
 - Add a user-facing `parameters` layer for posterior-sampling functions.
-  `sample_group_posterior(...)` should replace the current user-facing
-  `sample_posterior(...)` name while keeping the old name as a compatibility
-  alias.
+  `SimpleWorkflow` should expose `model.sample_posterior(...)`.
+  `HierarchicalWorkflow` should expose `model.sample_group_posterior(...)`
+  and later `model.sample_random_posterior(...)` so output levels are explicit.
 - Add thin workflow wrappers only when the model is the natural first argument:
-  `model.simulate(...)`, `model.sample_group_posterior(...)`,
-  `model.recover(...)`, and later `model.train_random_likelihood(...)` and
+  `model.simulate(...)`, `model.sample_posterior(...)` for simple workflows,
+  `model.sample_group_posterior(...)` for hierarchical workflows,
+  `model.recover(...)`, and later `model.train_random_workflow(...)` and
   `model.sample_random_posterior(...)`.
+- Do not add `HierarchicalWorkflow.sample_posterior(...)`; the group and random
+  posterior outputs should stay named separately to avoid ambiguity.
 - Do not add plot or scalar-metric wrappers to workflow classes. Plotting,
   diagnostics, and metrics should keep operating on arrays or data frames in
   `evaluation`.
@@ -111,16 +114,16 @@ code review and website polish milestone is complete.
   `ci_upper`, and `ess` when ESS is available.
 - Keep the current `summarize_subject_posterior(...)` behavior for now, but
   mark it as an upcoming legacy/outdated path. Do not remove it until the
-  BayesFlow/PyMC random-posterior route is validated.
+  BayesFlow-only random workflow route is validated.
 - Reserve the public names `sample_random_posterior(...)` and
-  `model.sample_random_posterior(...)`, but do not implement PyMC behavior in
+  `model.sample_random_posterior(...)`, but do not implement this behavior in
   this cleanup pass.
 
 ### 2. Adjust API Reference Around New Ownership
 
-- Update the Parameters page to feature group-level posterior sampling through
-  `sample_group_posterior(...)` and to reserve space for future random-effect
-  posterior sampling.
+- Update the Parameters page to feature `model.sample_posterior(...)` for
+  simple workflows, `model.sample_group_posterior(...)` for hierarchical group
+  parameters, and to reserve space for future random-effect posterior sampling.
 - Update the Evaluation page to document `summarize_group_parameters(...)` and
   `summarize_random_parameters(...)` as data-frame summaries of posterior
   draws.
@@ -129,25 +132,28 @@ code review and website polish milestone is complete.
   available while the random-posterior sampling design is evaluated.
 - Update examples so users can avoid reaching through `model.workflow` for
   common tasks. Prefer `model.simulate(...)` and
-  `model.sample_group_posterior(...)` in user-facing docs.
-- Keep compatibility notes brief and researcher-facing. Explain old names only
-  where needed to help existing users migrate.
+  `model.sample_posterior(...)` or `model.sample_group_posterior(...)` in
+  user-facing docs.
+- Do not keep `sample_posterior(model.workflow, ...)` as a documented route.
+  If a compatibility shim remains temporarily, make it warn or fail clearly and
+  tell users to pass the `bami` model object instead.
 
 ### 3. Design `sample_random_posterior`
 
-- Evaluate the BayesFlow-native route before implementing PyMC-specific code:
-  train a subject-level neural likelihood or ratio estimator from the existing
-  simulator, then use PyMC only as the optional sampler over random effects.
-- Keep PyMC optional. Users should only need the PyMC extra when they call
-  `sample_random_posterior(...)`.
-- Prefer the user-facing flow
-  `model.train_random_likelihood(file=..., overwrite=False)` followed by
-  `model.sample_random_posterior(...)`.
-- Preserve the simulator-first BayesFlow workflow. Do not require users to
-  write analytic PyMC likelihoods for normal `bami` workflows.
-- Treat the existing likelihood-weighted posthoc path as a fast approximate
-  route until the neural likelihood/ratio plus PyMC design is proven reliable
-  and teachable.
+- Use a BayesFlow-only subject-level posterior workflow first. Do not introduce
+  PyMC into the near-term random-posterior design.
+- Prefer the user-facing flow `model.train_random_workflow(file=...,
+  overwrite=False)` followed by `model.sample_random_posterior(observed_data)`.
+- `sample_random_posterior(...)` should use cached group posterior samples when
+  available, or internally sample group posterior from the same `observed_data`
+  when needed.
+- Preserve the simulator-first BayesFlow workflow and avoid analytic likelihood
+  requirements.
+- Treat the existing likelihood-weighted posthoc path as legacy and pending
+  deprecation. Keep it available until the random workflow produces validated
+  random-effect posterior draws.
+- Move PyMC compatibility to a future advanced compatibility investigation, not
+  an active implementation target for this milestone.
 
 ### 4. Multi-Condition Subject Workflows
 
@@ -189,6 +195,16 @@ code review and website polish milestone is complete.
   harms readability.
 - Keep any helper small, documented, and tested.
 - Avoid a broad utility layer unless it removes real duplication.
+
+### 9. Future PyMC Compatibility
+
+- Revisit PyMC only after the BayesFlow-only `train_random_workflow(...)` and
+  `sample_random_posterior(...)` route is validated.
+- Treat PyMC as an optional advanced bridge for users who specifically need
+  MCMC diagnostics or composition with PyMC models.
+- Do not require users to write analytic PyMC likelihoods for standard `bami`
+  workflows.
+- Do not add PyMC as a required dependency.
 
 ## Completed Work
 
