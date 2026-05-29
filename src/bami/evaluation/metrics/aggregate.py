@@ -51,7 +51,9 @@ def _as_name_list(value, name: str) -> list[str]:
         try:
             names = list(value)
         except TypeError as exc:
-            raise ValueError(f"{name} must be a column name or a list of names.") from exc
+            raise ValueError(
+                f"{name} must be a column name or a list of names."
+            ) from exc
 
     if not names:
         raise ValueError(f"{name} must contain at least one column name.")
@@ -131,7 +133,9 @@ def _check_interval_mass(value: float, name: str) -> float:
     return checked
 
 
-def _summarize_values(values: pd.Series, stats: Sequence[str], ci: float, q: float) -> dict:
+def _summarize_values(
+    values: pd.Series, stats: Sequence[str], ci: float, q: float
+) -> dict:
     """Compute requested statistics for one numeric vector.
 
     Parameters
@@ -247,7 +251,9 @@ def aggregate_data(
             for variable in variable_cols:
                 row = dict(base_row)
                 row["variable"] = variable
-                row.update(_summarize_values(group_df[variable], requested_stats, ci, q))
+                row.update(
+                    _summarize_values(group_df[variable], requested_stats, ci, q)
+                )
                 rows.append(row)
     else:
         for variable in variable_cols:

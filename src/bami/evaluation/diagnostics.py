@@ -49,7 +49,9 @@ def _as_param_list(params: str | Sequence[str] | None) -> list[str] | None:
         try:
             names = list(params)
         except TypeError as exc:
-            raise ValueError("params must be None, a parameter name, or a list.") from exc
+            raise ValueError(
+                "params must be None, a parameter name, or a list."
+            ) from exc
 
     if not names:
         raise ValueError("params must contain at least one parameter name.")
@@ -79,7 +81,9 @@ def _as_metric_list(metrics: str | Sequence[str]) -> list[str]:
         try:
             names = list(metrics)
         except TypeError as exc:
-            raise ValueError("metrics must be a metric name or a list of names.") from exc
+            raise ValueError(
+                "metrics must be a metric name or a list of names."
+            ) from exc
 
     if not names:
         raise ValueError("metrics must contain at least one metric name.")
@@ -167,7 +171,9 @@ def _compute_metric(metric: str, truth: np.ndarray, estimate: np.ndarray) -> flo
     return compute_rmse(truth, estimate)
 
 
-def _compute_random_metric(metric: str, truth: np.ndarray, estimate: np.ndarray) -> float:
+def _compute_random_metric(
+    metric: str, truth: np.ndarray, estimate: np.ndarray
+) -> float:
     """Compute one random-recovery metric for one simulated dataset.
 
     Parameters
@@ -550,7 +556,9 @@ def plot_parameter_recovery(
     names = _simple_recovery_params(model, simulated_data, samples, params)
     pairs = {}
     for name in names:
-        pairs[name] = _finite_pairs(simulated_data[name], _posterior_mean(samples, name))
+        pairs[name] = _finite_pairs(
+            simulated_data[name], _posterior_mean(samples, name)
+        )
     return _plot_recovery_grid(
         pairs,
         metrics=metric_names,
@@ -602,7 +610,9 @@ def plot_population_recovery(
     names = _population_recovery_params(model, simulated_data, samples, params)
     pairs = {}
     for name in names:
-        pairs[name] = _finite_pairs(simulated_data[name], _posterior_mean(samples, name))
+        pairs[name] = _finite_pairs(
+            simulated_data[name], _posterior_mean(samples, name)
+        )
     return _plot_recovery_grid(
         pairs,
         metrics=metric_names,

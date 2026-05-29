@@ -49,6 +49,7 @@ class DummyWorkflow:
             out[key] = stacked
         return out
 
+
 class DummyTransformWorkflow:
     """Tiny workflow that records sampling calls and transforms raw samples."""
 

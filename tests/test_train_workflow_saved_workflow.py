@@ -82,9 +82,7 @@ def test_train_workflow_saves_saved_workflow_when_file_is_supplied(tmp_path):
     assert model.workflow.fit_kwargs["keep_optimizer"] is True
 
 
-def test_train_workflow_loads_existing_saved_workflow_by_default(
-    tmp_path, monkeypatch
-):
+def test_train_workflow_loads_existing_saved_workflow_by_default(tmp_path, monkeypatch):
     """Existing saved workflows should be loaded unless overwrite is requested."""
 
     model = _ToyModel()

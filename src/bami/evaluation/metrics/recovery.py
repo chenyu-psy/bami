@@ -39,7 +39,9 @@ def _as_name_list(value, name: str) -> list[str]:
         try:
             names = list(value)
         except TypeError as exc:
-            raise ValueError(f"{name} must be a column name or a list of names.") from exc
+            raise ValueError(
+                f"{name} must be a column name or a list of names."
+            ) from exc
 
     if not names:
         raise ValueError(f"{name} must contain at least one column name.")
