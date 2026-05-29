@@ -1,12 +1,13 @@
-"""Metric helpers for parameter-recovery analysis."""
+"""Scalar metrics for evaluating recovered parameter values.
 
-from collections.abc import Iterable
+Use this module when you need one summary number for agreement between true
+parameters and estimated parameters.
+"""
 
 import numpy as np
-import pandas as pd
 
 
-def compute_pearson_r(truth: np.ndarray, estimate: np.ndarray) -> float:
+def compute_corr(truth: np.ndarray, estimate: np.ndarray) -> float:
     """Compute Pearson correlation with simple safety checks.
 
     Parameters
@@ -52,7 +53,7 @@ def compute_ccc(truth: np.ndarray, estimate: np.ndarray) -> float:
     Notes
     -----
     CCC penalizes both weak association and poor agreement with the identity
-    line. It is useful for population recovery because high Pearson r can still
+    line. It is useful for parameter recovery because high Pearson r can still
     hide biased or compressed estimates.
     """
 
@@ -75,22 +76,27 @@ def compute_ccc(truth: np.ndarray, estimate: np.ndarray) -> float:
     return float((2.0 * cov_xy) / denom)
 
 
-def validate_result_schema(df: pd.DataFrame, required: Iterable[str]) -> None:
-    """Validate expected recovery result columns.
+def compute_rmse(truth: np.ndarray, estimate: np.ndarray) -> float:
+    """Compute root mean squared error between true and estimated values.
 
     Parameters
     ----------
-    df : pd.DataFrame
-        Result table.
-    required : Iterable[str]
-        Required column names.
+    truth : np.ndarray
+        Ground-truth values.
+    estimate : np.ndarray
+        Point estimates aligned with truth.
 
     Returns
     -------
-    None
-        Raises ValueError if schema is incomplete.
+    float
+        Root mean squared error.
     """
 
-    missing = [col for col in required if col not in df.columns]
-    if missing:
-        raise ValueError(f"Missing required result columns: {missing}")
+    x = np.asarray(truth, dtype=float).reshape(-1)
+    y = np.asarray(estimate, dtype=float).reshape(-1)
+
+    if x.shape[0] != y.shape[0]:
+        raise ValueError("truth and estimate must have the same number of elements.")
+    if x.shape[0] == 0:
+        return float("nan")
+    return float(np.sqrt(np.mean((y - x) ** 2)))

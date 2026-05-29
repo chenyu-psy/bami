@@ -4,7 +4,7 @@ import numpy as np
 
 from fixtures_model_specs import EZDM_SPEC
 from bami.inference.priors import apply_link, raw_key
-from bami.simulators.ezdm import simulate_ezdm_summary
+from bami.simulators.ezdm import simulate_ezdm_simple
 from bami.workflows import SimpleWorkflow
 
 
@@ -26,7 +26,7 @@ def _build_ezdm_model(n_trials: int = 50) -> SimpleWorkflow:
         name=EZDM_SPEC["model_name"],
         param_names=["v", "a", "t0"],
         priors=EZDM_SPEC["priors"],
-        simulator=simulate_ezdm_summary,
+        simulator=simulate_ezdm_simple,
         observation="aggregate",
         simulator_kwargs={"s": EZDM_SPEC["scaling"]},
         data_width=len(EZDM_SPEC["summary_contract"]["order"]),
@@ -72,7 +72,7 @@ def test_ezdm_fixed_simple_transform_returns_public_parameters():
         raw_key("t0"): np.array([[np.log(0.25), np.log(0.35)]]),
     }
 
-    out = model.transform_posterior_samples(samples)
+    out = model.convert_posterior(samples)
 
     expected_v = apply_link(samples[raw_key("v")], EZDM_SPEC["priors"]["v"]["link"])
     assert np.array_equal(out["v"], expected_v)
@@ -105,7 +105,7 @@ def test_ezdm_workflow_simulator_expansion_matches_preset_summary():
     )
 
     np.random.seed(2026)
-    from_simulator = simulate_ezdm_summary(
+    from_simulator = simulate_ezdm_simple(
         **params,
         n_trials=50,
         s=EZDM_SPEC["scaling"],

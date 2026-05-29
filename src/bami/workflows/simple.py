@@ -14,8 +14,9 @@ from collections.abc import Callable, Mapping, Sequence
 import numpy as np
 import bayesflow as bf
 
+from bami.inputs import InputFormat
+from bami.workflows import training
 from bami.workflows.contracts import validate_observation, validate_workflow_contract
-from bami.workflows.obs_spec import ObsSpec
 
 
 class SimpleWorkflow:
@@ -55,8 +56,8 @@ class SimpleWorkflow:
         ``[low, high)`` for each simulated dataset.
     include_trial_feature
         Whether to append the simulated trial count to each data row.
-    obs_spec
-        Optional observation encoding contract. If supplied, it formats
+    input_format
+        Optional input-format helper. If supplied, it formats
         simulator rows and trial counts instead of ``include_trial_feature``.
     summary_dim
         Width of the DeepSet summary network.
@@ -69,7 +70,7 @@ class SimpleWorkflow:
     Returns
     -------
     None
-        The initialized object exposes ``workflow`` and ``dynamic_fit``.
+        The initialized object exposes ``workflow`` and ``train_workflow``.
     """
 
     workflow_level = "simple"
@@ -88,7 +89,7 @@ class SimpleWorkflow:
         n_trials: int | None = 100,
         n_trials_range: Sequence[int] | None = None,
         include_trial_feature: bool = False,
-        obs_spec: ObsSpec | None = None,
+        input_format: InputFormat | None = None,
         summary_dim: int = 64,
         n_coupling_layers: int = 6,
         transform_samples: Callable | None = None,
@@ -117,7 +118,7 @@ class SimpleWorkflow:
             n_trials_range=n_trials_range,
         )
         self.include_trial_feature = bool(include_trial_feature)
-        self.obs_spec = self._check_obs_spec(obs_spec)
+        self.input_format = self._check_input_format(input_format)
         self.max_trials = self._resolve_max_trials()
         self.include_mask = self.observation == "trial" and self.trial_design == "flex"
         self.workflow_family = f"{self.trial_design}_simple"
@@ -376,7 +377,7 @@ class SimpleWorkflow:
             inference_conditions=None,
             summary_variables=["data"],
         )
-        self.workflow.transform_posterior_samples = self.transform_posterior_samples
+        self.workflow.transform_posterior_samples = self.convert_posterior
         self.workflow.workflow_level = self.workflow_level
         self.workflow.workflow_family = self.workflow_family
         self.workflow.trial_design = self.trial_design
@@ -384,8 +385,8 @@ class SimpleWorkflow:
         self.workflow.observation = self.observation
         self.workflow.include_trial_feature = self.include_trial_feature
         self.workflow.include_mask = self.include_mask
-        self.workflow.obs_spec = self.obs_spec
-        self.workflow.obs_spec_metadata = self._obs_spec_metadata()
+        self.workflow.input_format = self.input_format
+        self.workflow.input_format_metadata = self._input_format_metadata()
         self.workflow.obs_names = self._workflow_obs_names()
 
     def _feature_width(self) -> int:
@@ -397,8 +398,8 @@ class SimpleWorkflow:
             Simulator row width plus optional trial-count feature.
         """
 
-        if self.obs_spec is not None:
-            return self.obs_spec.output_width(self.data_width)
+        if self.input_format is not None:
+            return self.input_format.output_width(self.data_width)
 
         width = self.data_width
         if self.observation == "aggregate" and self.include_trial_feature:
@@ -425,38 +426,40 @@ class SimpleWorkflow:
         return names
 
     @staticmethod
-    def _check_obs_spec(obs_spec: ObsSpec | None) -> ObsSpec | None:
-        """Validate an optional observation spec.
+    def _check_input_format(
+        input_format: InputFormat | None,
+    ) -> InputFormat | None:
+        """Validate an optional input format.
 
         Parameters
         ----------
-        obs_spec
-            Candidate observation spec or ``None``.
+        input_format
+            Candidate input format or ``None``.
 
         Returns
         -------
-        ObsSpec or None
-            The validated spec.
+        InputFormat or None
+            The validated input format.
         """
 
-        if obs_spec is None:
+        if input_format is None:
             return None
-        if not isinstance(obs_spec, ObsSpec):
-            raise TypeError("obs_spec must be an ObsSpec or None.")
-        return obs_spec
+        if not isinstance(input_format, InputFormat):
+            raise TypeError("input_format must be an InputFormat or None.")
+        return input_format
 
-    def _obs_spec_metadata(self) -> dict | None:
-        """Return JSON-safe observation metadata for this workflow.
+    def _input_format_metadata(self) -> dict | None:
+        """Return JSON-safe input-format metadata for this workflow.
 
         Returns
         -------
         dict or None
-            Metadata from ``obs_spec`` when one is configured.
+            Metadata from ``input_format`` when one is configured.
         """
 
-        if self.obs_spec is None:
+        if self.input_format is None:
             return None
-        return self.obs_spec.to_dict()
+        return self.input_format.to_dict()
 
     def _append_trial_feature(self, row, n_trials: int) -> np.ndarray:
         """Append the trial count to one simulator row.
@@ -519,8 +522,8 @@ class SimpleWorkflow:
             Aggregate data with shape ``(1, feature_width)``.
         """
 
-        if self.obs_spec is not None:
-            row = self.obs_spec.encode(row, n_trials)
+        if self.input_format is not None:
+            row = self.input_format.encode(row, n_trials)
         elif self.include_trial_feature:
             row = self._append_trial_feature(row, n_trials)
         return self._as_data_row(row)
@@ -558,7 +561,7 @@ class SimpleWorkflow:
         data[:n_trials, self.data_width] = 1.0
         return data
 
-    def counts_to_data(self, counts) -> tuple[np.ndarray, list]:
+    def _prepare_observed_counts(self, counts) -> tuple[np.ndarray, list]:
         """Convert simple count rows to BayesFlow summary data.
 
         Parameters
@@ -574,14 +577,16 @@ class SimpleWorkflow:
         """
 
         if self.observation != "aggregate":
-            raise ValueError("counts_to_data is only available for aggregate data.")
+            raise ValueError(
+                "_prepare_observed_counts is only available for aggregate data."
+            )
         arr = np.asarray(counts, dtype=np.float32)
         row_ids = list(range(arr.shape[0])) if arr.ndim >= 2 else [0]
-        if self.obs_spec is not None and self.obs_spec.add_n:
+        if self.input_format is not None and self.input_format.add_n:
             if arr.shape[-1] != self.data_width + 1:
                 raise ValueError(
                     "counts must include base features plus n_trials when "
-                    "obs_spec encodes n."
+                    "input_format encodes n."
                 )
             n_trials = arr[..., -1]
             arr = arr[..., : self.data_width]
@@ -593,12 +598,12 @@ class SimpleWorkflow:
             raise ValueError("counts must not contain missing or infinite values.")
         if np.any(arr < 0):
             raise ValueError("counts must be nonnegative.")
-        if self.obs_spec is not None:
+        if self.input_format is not None:
             encoded_rows = []
             flat_arr = arr.reshape(-1, self.data_width)
             flat_n = np.asarray(n_trials).reshape(-1)
             for row, n_value in zip(flat_arr, flat_n, strict=True):
-                encoded_rows.append(self.obs_spec.encode(row, int(n_value)))
+                encoded_rows.append(self.input_format.encode(row, int(n_value)))
             arr = np.asarray(encoded_rows, dtype=np.float32).reshape(
                 *arr.shape[:-1],
                 self._feature_width(),
@@ -610,7 +615,7 @@ class SimpleWorkflow:
             arr = arr[np.newaxis, :, :]
         return arr.astype(np.float32), row_ids
 
-    def transform_posterior_samples(self, samples: dict) -> dict:
+    def convert_posterior(self, samples: dict) -> dict:
         """Transform raw posterior samples to public parameter keys.
 
         Parameters
@@ -630,7 +635,114 @@ class SimpleWorkflow:
 
         return transform_simple_samples(samples, self.priors)
 
-    def dynamic_fit(
+    def simulate(self, n_datasets: int) -> Mapping[str, np.ndarray]:
+        """Simulate datasets from this simple workflow.
+
+        Parameters
+        ----------
+        n_datasets
+            Number of simulated datasets to draw from the workflow prior and
+            simulator.
+
+        Returns
+        -------
+        Mapping[str, numpy.ndarray]
+            Simulated data and parameter truth arrays using the workflow's
+            data-shape contract.
+        """
+
+        return self.workflow.simulate(n_datasets)
+
+    def sample_posterior(
+        self,
+        test_data: Mapping[str, np.ndarray],
+        num_samples: int,
+        approximator_kwargs: Mapping | None = None,
+        sample_batch_size: int | None = None,
+    ) -> Mapping[str, np.ndarray]:
+        """Draw posterior samples for this simple workflow.
+
+        Parameters
+        ----------
+        test_data
+            Observed or simulated data dictionary passed to the trained
+            BayesFlow workflow. In examples this is often created with
+            ``model.simulate(n_datasets)``.
+        num_samples
+            Number of posterior draws to request for each dataset.
+        approximator_kwargs
+            Optional keyword arguments forwarded to BayesFlow's
+            ``workflow.sample`` method.
+        sample_batch_size
+            Optional number of datasets to sample at once. Use this when many
+            datasets would otherwise exceed accelerator memory.
+
+        Returns
+        -------
+        Mapping[str, numpy.ndarray]
+            Posterior draws on the public parameter scale. The sample axis is
+            the same as BayesFlow's output, usually axis 1 for batched data.
+        """
+
+        from bami.workflows._sampling import _sample_posterior
+
+        return _sample_posterior(
+            workflow=self.workflow,
+            test_data=test_data,
+            num_samples=num_samples,
+            approximator_kwargs=approximator_kwargs,
+            sample_batch_size=sample_batch_size,
+        )
+
+    def plot_parameter_recovery(
+        self,
+        n_datasets: int,
+        num_samples: int,
+        params: str | Sequence[str] | None = None,
+        metrics: str | Sequence[str] = "corr",
+        n_cols: int = 3,
+    ):
+        """Plot parameter recovery for this simple workflow.
+
+        The method simulates datasets from the workflow prior, samples the
+        posterior for each dataset, and plots simulated parameter values
+        against posterior means. It is intended for diagnosing one fitted model,
+        not for comparing multiple models.
+
+        Parameters
+        ----------
+        n_datasets
+            Number of simulated datasets used for the diagnostic plot.
+        num_samples
+            Number of posterior draws per simulated dataset.
+        params
+            Optional parameter name or names to plot. By default all public
+            inferred parameters with both simulated truth and posterior samples
+            are shown.
+        metrics
+            Metric name or names shown in each panel title. Supported values
+            are ``corr``, ``ccc``, and ``rmse``.
+        n_cols
+            Maximum number of columns in the plot grid.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+            Parameter recovery figure.
+        """
+
+        from bami.evaluation.diagnostics import plot_parameter_recovery
+
+        return plot_parameter_recovery(
+            self,
+            n_datasets=n_datasets,
+            num_samples=num_samples,
+            params=params,
+            metrics=metrics,
+            n_cols=n_cols,
+        )
+
+    def train_workflow(
         self,
         max_epochs=100,
         initial_epochs=10,
@@ -639,9 +751,15 @@ class SimpleWorkflow:
         validation_data=200,
         patience=5,
         min_delta=0.1,
+        workers=4,
+        max_queue_size=16,
+        torch_device=None,
+        verbose=1,
+        file=None,
+        overwrite=False,
         **kwargs,
     ):
-        """Train the workflow with reusable validation data.
+        """Train the workflow with optional saved-workflow handling.
 
         Parameters
         ----------
@@ -653,54 +771,48 @@ class SimpleWorkflow:
             Integer validation-set size or a pre-simulated validation dict.
         patience, min_delta
             Early-stopping controls based on validation loss.
+        workers
+            Number of Keras data-loading workers for online simulation batches.
+        max_queue_size
+            Maximum queue length for prefetched simulation batches.
+        torch_device
+            Torch default device to use during training, such as ``"mps"`` or
+            ``"cpu"``. Unavailable accelerators fall back to CPU.
+        verbose
+            Training log verbosity level passed to Keras.
+        file
+            Optional saved workflow file. When supplied, existing weights are
+            loaded by default and new weights are saved after fitting.
+        overwrite
+            Whether to refit and overwrite ``file`` when the saved workflow
+            file already exists.
         **kwargs
             Additional keyword arguments passed to ``workflow.fit_online``.
 
         Returns
         -------
-        object
-            BayesFlow training history.
+        object or dict
+            BayesFlow training history, or ``{"loaded": True, "file": path}``
+            when an existing saved workflow file is reused.
         """
 
-        fixed_validation_data = self._resolve_validation_data(validation_data)
-        total_epochs = 0
-        best_val = np.inf
-        no_improve_epochs = 0
-        history_all = {"loss": [], "val_loss": []}
-
-        while total_epochs < max_epochs:
-            if total_epochs == 0 and initial_epochs > 0:
-                current_epochs = initial_epochs
-            else:
-                current_epochs = max(1, patience - (no_improve_epochs % patience))
-
-            hist = self.workflow.fit_online(
-                epochs=current_epochs,
-                num_batches_per_epoch=n_batch,
-                batch_size=batch_size,
-                validation_data=fixed_validation_data,
-                **kwargs,
-            )
-            stage_hist = hist.history if hasattr(hist, "history") else hist
-            stage_loss = stage_hist.get("loss", [])
-            stage_val = stage_hist.get("val_loss", stage_loss)
-
-            history_all["loss"].extend(stage_loss)
-            history_all["val_loss"].extend(stage_val)
-            total_epochs += len(stage_val)
-            self.workflow.history = hist
-            hist.history = history_all
-
-            for val_loss in stage_val:
-                if best_val - val_loss > min_delta:
-                    best_val = val_loss
-                    no_improve_epochs = 0
-                else:
-                    no_improve_epochs += 1
-                    if no_improve_epochs >= patience:
-                        return self.workflow.history
-
-        return self.workflow.history
+        return training.train_workflow(
+            self,
+            max_epochs=max_epochs,
+            initial_epochs=initial_epochs,
+            n_batch=n_batch,
+            batch_size=batch_size,
+            validation_data=validation_data,
+            patience=patience,
+            min_delta=min_delta,
+            workers=workers,
+            max_queue_size=max_queue_size,
+            torch_device=torch_device,
+            verbose=verbose,
+            file=file,
+            overwrite=overwrite,
+            **kwargs,
+        )
 
     def _resolve_validation_data(self, validation_data: int | dict) -> dict:
         """Return validation data for training.
