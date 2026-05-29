@@ -73,12 +73,17 @@ Completed for metrics, legacy recovery, and model diagnostic plots.
 
 ### 5. Improve Existing Examples
 
-- Review the current simple SDM and hierarchical ezDM examples.
-- Ensure examples match the current API and can be copied into a research
-  project with minimal editing.
-- Show expected array or dataframe shapes after major steps.
-- Prefer examples that demonstrate existing supported workflow patterns before
-  introducing advanced internals.
+Completed for the current simple SDM and hierarchical ezDM examples.
+
+- The examples now show complete workflows from model construction through
+  simulation, training/loading, posterior sampling, dataframe recovery tables,
+  `aggregate_data(...)`, `estimate_recovery(...)`, and diagnostic plots.
+- Expected array shapes are shown after major simulation and sampling steps.
+- Examples use current model-level APIs rather than old recovery or evaluation
+  wrappers.
+- Future example reviews should focus on runtime defaults, copy-paste testing
+  on fresh environments, and whether additional model families need the same
+  complete workflow treatment.
 
 ### 6. Run Checks and Record Remaining Gaps
 
@@ -303,6 +308,25 @@ Completed.
 - Current recovery-style summaries should be built explicitly from
   `model.simulate(...)`, `model.sample_*`, `aggregate_data(...)`, and
   `estimate_recovery(...)`.
+
+### Complete Workflow Examples
+
+Completed.
+
+- Expanded the simple SDM example into a full workflow covering model setup,
+  validation simulation, saved workflow training/loading, posterior sampling,
+  long-format recovery tables, `aggregate_data(...)`, `estimate_recovery(...)`,
+  and `model.plot_parameter_recovery(...)`.
+- Expanded the hierarchical ezDM example into a full workflow covering group
+  and random-effect training, `sample_group_posterior(...)`,
+  `sample_random_posterior(...)`, group-level and subject-level recovery
+  tables, and population/random diagnostic plots.
+- Updated the website landing page to describe these as complete workflow
+  examples rather than short examples.
+- Updated the README evaluation section to mention model diagnostic plots.
+- `uv run mkdocs build` passed with the upstream Material for MkDocs 2.0
+  warning only.
+- `git diff --check` passed.
 
 ### Model-Owned Posterior Sampling APIs
 

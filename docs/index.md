@@ -138,8 +138,8 @@ The upper bound is exclusive, so this example draws 50 to 200 trials.
 
 ## Learning bami
 
-Start with one of the short examples, then use the API reference when you need
-the exact arguments for a function or workflow.
+Start with one of the complete workflow examples, then use the API reference
+when you need the exact arguments for a function or workflow.
 
 <div class="bami-link-list">
   <a href="examples/simple-sdm/">Simple SDM workflow</a>

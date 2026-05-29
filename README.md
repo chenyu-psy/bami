@@ -177,7 +177,8 @@ and circular-response summary utilities.
 settings.
 
 `bami.evaluation`
-: Dataframe-first recovery metrics and summary helpers.
+: Dataframe-first recovery metrics, summary helpers, and model diagnostic
+plots.
 
 `bami.data_ops` and `bami.data_shapes`
 : Small utilities for tabular data handling, validation, and padding.
@@ -247,6 +248,16 @@ recovery_rows = estimate_recovery(
     estimated_data=estimated_values,
     group_by="param",
     metrics=["ccc", "rmse"],
+)
+```
+
+For one fitted model, use model-level diagnostic plots:
+
+```python
+fig = model.plot_parameter_recovery(
+    n_datasets=50,
+    num_samples=500,
+    metrics=["corr", "ccc"],
 )
 ```
 
