@@ -31,9 +31,7 @@ nav:
           - Population and individual parameters: api/parameters.md
       - Evaluation:
           - Metrics: api/evaluation/metrics.md
-          - Plots and table contracts: api/evaluation/plots-contracts.md
-      - Recovery:
-          - Recovery workflows: api/recovery.md
+          - Diagnostics: api/evaluation/diagnostics.md
       - Advanced:
           - Input:
               - Input formats: api/inputs/formats.md

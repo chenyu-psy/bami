@@ -43,6 +43,12 @@ Use these functions to check recovery and model performance.
 [`estimate_recovery`](evaluation/metrics.md)
 : Compute grouped recovery metrics from simulated and estimated value tables.
 
+[`aggregate_data`](evaluation/metrics.md)
+: Aggregate one or more numeric columns by optional grouping columns.
+
+[`model.plot_parameter_recovery`, `model.plot_population_recovery`, and `model.plot_random_recovery`](evaluation/diagnostics.md)
+: Plot model-level recovery diagnostics for one fitted workflow.
+
 Advanced BayesFlow posterior diagnostics can be computed directly with
 `model.workflow.compute_default_diagnostics(...)`.
 
@@ -54,28 +60,6 @@ diagnostics = model.workflow.compute_default_diagnostics(
     as_data_frame=True,
 )
 ```
-
-[`plot_population_recovery`](evaluation/plots-contracts.md)
-: Plot population-level true vs. estimated parameter recovery.
-
-[`plot_individual_recovery`](evaluation/plots-contracts.md)
-: Plot individual recovery correlations by dataset and parameter.
-
-[`validate_recovery_contract`](evaluation/plots-contracts.md)
-: Check the shared recovery table schema before plotting or saving.
-
-## Recovery workflows
-
-Use these functions for group-generated recovery checks.
-
-[`simulate`](recovery.md)
-: Simulate group-level recovery datasets.
-
-[`recover`](recovery.md)
-: Estimate population and individual recovery rows for one fitted workflow.
-
-[`summarize`](recovery.md)
-: Summarize recovery rows into tables and figures.
 
 ## Advanced
 

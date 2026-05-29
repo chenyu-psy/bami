@@ -3,7 +3,7 @@
 `bami` helps researchers build Bayesian amortized model inference workflows
 with [BayesFlow](https://bayesflow.org/). It is meant for research projects
 where you already have a model simulator and want a reusable workflow for
-simulation, training, posterior sampling, recovery checks, and diagnostic plots.
+simulation, training, posterior sampling, and recovery checks.
 
 The package is organized around a simple idea:
 
@@ -176,11 +176,8 @@ and circular-response summary utilities.
 : Prior drawing, parameter transforms, saved-workflow helpers, and runtime
 settings.
 
-`bami.recovery`
-: Recovery workflows for comparing true and estimated parameters.
-
 `bami.evaluation`
-: Recovery tables, diagnostic metric tables, and plotting functions.
+: Dataframe-first recovery metrics and summary helpers.
 
 `bami.data_ops` and `bami.data_shapes`
 : Small utilities for tabular data handling, validation, and padding.
@@ -213,22 +210,44 @@ A typical analysis script uses this order:
 2. Simulate validation or recovery datasets.
 3. Train or load the workflow.
 4. Sample posterior draws.
-5. Compute recovery or diagnostic tables.
-6. Plot the results.
+5. Aggregate posterior draws or compute recovery metrics.
 
 The evaluation helpers return ordinary pandas data frames so they can be
 inspected, saved, or plotted with project-specific code.
 
 ```python
+import pandas as pd
+
 from bami.evaluation import (
-    estimate_population_recovery,
-    plot_population_recovery,
+    aggregate_data,
+    estimate_recovery,
 )
 
-test_data = model.simulate(100)
-samples = model.sample_posterior(test_data=test_data, num_samples=500)
-recovery_df = estimate_population_recovery(test_data=test_data, samples=samples)
-fig = plot_population_recovery(recovery_df)
+simulated_values = pd.DataFrame(
+    {
+        "dataset_id": [0, 1],
+        "param": ["c", "c"],
+        "simulated_value": [0.8, 1.2],
+    }
+)
+estimated_values = pd.DataFrame(
+    {
+        "dataset_id": [0, 1],
+        "param": ["c", "c"],
+        "estimated_value": [0.9, 1.1],
+    }
+)
+value_summary = aggregate_data(
+    estimated_values,
+    variables="estimated_value",
+    group_by="param",
+)
+recovery_rows = estimate_recovery(
+    simulated_data=simulated_values,
+    estimated_data=estimated_values,
+    group_by="param",
+    metrics=["ccc", "rmse"],
+)
 ```
 
 ## Development

@@ -5,7 +5,6 @@ The package is organized by responsibility:
 - inputs: input-format helpers for workflow data rows
 - simulators: preset model-family simulator functions
 - inference: priors, transforms, saved workflows, and runtime helpers
-- recovery: parameter-recovery analysis helpers
 - evaluation: reusable plotting and metric contracts for model assessment
 - data_ops: tabular data transformation helpers
 - data_shapes: future data-shape validation and padding helpers
@@ -16,7 +15,6 @@ __all__ = [
     "inputs",
     "simulators",
     "inference",
-    "recovery",
     "evaluation",
     "data_ops",
     "data_shapes",

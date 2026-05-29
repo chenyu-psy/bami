@@ -1639,6 +1639,54 @@ class HierarchicalWorkflow:
             sample_batch_size=sample_batch_size,
         )
 
+    def plot_population_recovery(
+        self,
+        n_datasets: int,
+        num_samples: int,
+        params: str | Sequence[str] | None = None,
+        metrics: str | Sequence[str] = "corr",
+        n_cols: int = 3,
+    ):
+        """Plot group-level parameter recovery for this hierarchy.
+
+        The method simulates group datasets from the workflow prior, samples
+        group-level posteriors, and plots simulated group parameters against
+        posterior means. It is intended for diagnosing one fitted hierarchical
+        model, not for comparing multiple models.
+
+        Parameters
+        ----------
+        n_datasets
+            Number of simulated group datasets used for the diagnostic plot.
+        num_samples
+            Number of group posterior draws per simulated dataset.
+        params
+            Optional population parameter key or keys to plot, such as
+            ``"c_mu"`` or ``"c_sigma"``. By default all available public group
+            keys are shown.
+        metrics
+            Metric name or names shown in each panel title. Supported values
+            are ``corr``, ``ccc``, and ``rmse``.
+        n_cols
+            Maximum number of columns in the plot grid.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+            Population parameter recovery figure.
+        """
+
+        from bami.evaluation.diagnostics import plot_population_recovery
+
+        return plot_population_recovery(
+            self,
+            n_datasets=n_datasets,
+            num_samples=num_samples,
+            params=params,
+            metrics=metrics,
+            n_cols=n_cols,
+        )
+
     def _group_sample_array(
         self,
         group_samples: Mapping[str, np.ndarray],
@@ -2280,6 +2328,55 @@ class HierarchicalWorkflow:
             n_datasets=n_datasets,
             n_samples=n_samples,
             n_subjects=n_subject_slots,
+        )
+
+    def plot_random_recovery(
+        self,
+        n_datasets: int,
+        num_samples: int,
+        params: str | Sequence[str] | None = None,
+        metrics: str | Sequence[str] = "corr",
+        n_cols: int = 3,
+    ):
+        """Plot dataset-level random parameter recovery metrics.
+
+        The method simulates group datasets, samples group posteriors, samples
+        subject-level random effects, and plots one recovery metric per
+        simulated dataset and parameter. It requires ``keep_subject_truth`` so
+        the simulation contains subject-level true values.
+
+        Parameters
+        ----------
+        n_datasets
+            Number of simulated group datasets used for the diagnostic plot.
+        num_samples
+            Number of group posterior draws per simulated dataset. These draws
+            define the paired shrinkage conditions for random-effect sampling.
+        params
+            Optional subject-level parameter name or names to plot, such as
+            ``"c"`` or ``"kappa"``. By default all saved subject-truth
+            parameters with posterior samples are shown.
+        metrics
+            Metric name or names to plot. Supported values are ``corr``,
+            ``ccc``, and ``rmse``.
+        n_cols
+            Maximum number of columns in the metric panel grid.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+            Subject-level random parameter recovery figure.
+        """
+
+        from bami.evaluation.diagnostics import plot_random_recovery
+
+        return plot_random_recovery(
+            self,
+            n_datasets=n_datasets,
+            num_samples=num_samples,
+            params=params,
+            metrics=metrics,
+            n_cols=n_cols,
         )
 
     def _format_random_samples(

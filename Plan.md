@@ -39,7 +39,7 @@ documentation, or tests.
 
 ### 3. Review Existing Evaluation Tools
 
-Partly completed.
+Completed for metrics, legacy recovery, and model diagnostic plots.
 
 - Evaluation metrics/API cleanup is complete. Public evaluation metrics now
   keep only dataframe-first helpers and scalar metrics:
@@ -49,11 +49,16 @@ Partly completed.
   evaluation metrics.
 - Old BayesFlow/brms diagnostic wrappers, placeholder metrics, and public
   recovery wrappers have been removed from evaluation.
-- Evaluation plotting functions are not yet reviewed. Check plot API names,
-  function order, table contracts, visual defaults, and whether diagnostic
-  plots still belong in the public docs.
-- Recovery workflows in `bami.recovery` are intentionally deferred for a
-  separate review and redesign.
+- Old evaluation plotting functions and table-contract validators have been
+  removed.
+- New diagnostic plots live in `bami.evaluation.diagnostics`, with shallow
+  model methods for ordinary use:
+  `model.plot_parameter_recovery(...)`,
+  `model.plot_population_recovery(...)`, and
+  `model.plot_random_recovery(...)`.
+- The old `bami.recovery` module has been removed. Future recovery workflows,
+  if needed, should be redesigned from model-level sampling and dataframe-first
+  evaluation helpers.
 
 ### 4. Polish Website Structure
 
@@ -61,7 +66,7 @@ Partly completed.
 - Make standard workflows easier to find before advanced internals.
 - Keep `README.md` focused on the package overview and first successful use.
 - Keep `docs/` pages organized by task: setup, simulation, training,
-  evaluation, recovery, and examples.
+  evaluation, diagnostics, and examples.
 - Hide or de-emphasize advanced inference navigation if it distracts from
   normal user workflows. Keep the source docs in place so internal references
   do not break.
@@ -259,6 +264,45 @@ Completed.
   passed.
 - `uv run mkdocs build` passed with the upstream Material for MkDocs 2.0
   warning only.
+
+### Evaluation Diagnostics Plot Cleanup
+
+Completed.
+
+- Deleted the old public `bami.evaluation.plots` API and the old recovery and
+  diagnostic table-contract validators.
+- Added `bami.evaluation.diagnostics` as the home for diagnostic plotting
+  logic, with workflow methods kept as shallow user-facing aliases.
+- Added `plot_parameter_recovery(...)` for simple workflows and
+  `plot_population_recovery(...)` for hierarchical population parameters.
+  These scatter plots use one shared `metrics` argument, defaulting to
+  `"corr"`, and show requested metrics in panel titles.
+- Added `plot_random_recovery(...)` for hierarchical random parameters. It now
+  computes one dataset-level metric per parameter and plots the metric
+  distribution with box plots and jittered points.
+- Removed user-facing sampling controls and visual style controls from the
+  diagnostic plot API. Diagnostics use a conservative internal sampling batch
+  size and fixed plotting style.
+- Updated `docs/api/evaluation/diagnostics.md` so each diagnostic function is
+  documented before its example, and the page explains that model comparison
+  should use explicit dataframes plus `estimate_recovery(...)`.
+- `uv run pytest tests/test_evaluation_metrics_bayesflow.py` passed.
+- `uv run pytest tests/test_evaluation_scalar_metrics.py` passed.
+- `uv run ruff check src tests` passed.
+- `uv run mkdocs build` passed with the upstream Material for MkDocs 2.0
+  warning only.
+
+### Legacy Recovery Module Removal
+
+Completed.
+
+- Deleted the old `bami.recovery` module and its public
+  `simulate` / `recover` / `summarize` workflow.
+- Removed the recovery API page and navigation entry.
+- Deleted the obsolete group recovery tests.
+- Current recovery-style summaries should be built explicitly from
+  `model.simulate(...)`, `model.sample_*`, `aggregate_data(...)`, and
+  `estimate_recovery(...)`.
 
 ### Model-Owned Posterior Sampling APIs
 

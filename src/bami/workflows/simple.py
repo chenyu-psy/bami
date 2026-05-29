@@ -694,6 +694,54 @@ class SimpleWorkflow:
             sample_batch_size=sample_batch_size,
         )
 
+    def plot_parameter_recovery(
+        self,
+        n_datasets: int,
+        num_samples: int,
+        params: str | Sequence[str] | None = None,
+        metrics: str | Sequence[str] = "corr",
+        n_cols: int = 3,
+    ):
+        """Plot parameter recovery for this simple workflow.
+
+        The method simulates datasets from the workflow prior, samples the
+        posterior for each dataset, and plots simulated parameter values
+        against posterior means. It is intended for diagnosing one fitted model,
+        not for comparing multiple models.
+
+        Parameters
+        ----------
+        n_datasets
+            Number of simulated datasets used for the diagnostic plot.
+        num_samples
+            Number of posterior draws per simulated dataset.
+        params
+            Optional parameter name or names to plot. By default all public
+            inferred parameters with both simulated truth and posterior samples
+            are shown.
+        metrics
+            Metric name or names shown in each panel title. Supported values
+            are ``corr``, ``ccc``, and ``rmse``.
+        n_cols
+            Maximum number of columns in the plot grid.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+            Parameter recovery figure.
+        """
+
+        from bami.evaluation.diagnostics import plot_parameter_recovery
+
+        return plot_parameter_recovery(
+            self,
+            n_datasets=n_datasets,
+            num_samples=num_samples,
+            params=params,
+            metrics=metrics,
+            n_cols=n_cols,
+        )
+
     def train_workflow(
         self,
         max_epochs=100,

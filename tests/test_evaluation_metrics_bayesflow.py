@@ -5,9 +5,11 @@ import subprocess
 import sys
 import warnings
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
+from bami.evaluation import diagnostics
 from bami.workflows import HierarchicalWorkflow, SimpleWorkflow
 from bami.workflows._sampling import _sample_posterior
 from bami.workflows import training
@@ -173,6 +175,258 @@ def test_hierarchical_workflow_simulate_delegates_to_bayesflow_workflow():
     out = model.simulate(2)
 
     assert out is wf._test
+
+
+def test_simple_workflow_plot_parameter_recovery_returns_figure():
+    """Simple model diagnostics should plot one panel per recovered parameter."""
+
+    model = SimpleWorkflow.__new__(SimpleWorkflow)
+    model.priors = {
+        "theta": {"mean": 0.0, "sd": 1.0, "link": "identity"},
+        "scale": {"mean": 0.0, "sd": 1.0, "link": "log"},
+    }
+    simulated = {
+        "theta": np.array([0.0, 1.0, 2.0]),
+        "scale": np.array([1.0, 2.0, 3.0]),
+    }
+
+    def fake_simulate(n_datasets):
+        """Return deterministic simulated truth for plot diagnostics."""
+
+        assert n_datasets == 3
+        return simulated
+
+    def fake_sample_posterior(**kwargs):
+        """Return posterior draws with axis 1 as the sample dimension."""
+
+        assert kwargs["num_samples"] == 2
+        assert kwargs["sample_batch_size"] == 16
+        theta = np.array([[0.0, 0.2], [1.0, 1.2], [2.0, 2.2]])
+        scale = np.array([[1.1, 1.3], [2.1, 2.3], [3.1, 3.3]])
+        return {"theta": theta, "scale": scale}
+
+    model.simulate = fake_simulate
+    model.sample_posterior = fake_sample_posterior
+
+    fig = model.plot_parameter_recovery(n_datasets=3, num_samples=2)
+
+    assert len(fig.axes) == 2
+    assert "theta" in fig.axes[0].get_title()
+    assert "corr=" in fig.axes[0].get_title()
+    assert "CCC=" not in fig.axes[0].get_title()
+    plt.close(fig)
+
+
+def test_evaluation_diagnostics_plot_parameter_recovery_direct_call():
+    """Diagnostics functions should live in evaluation and accept a workflow."""
+
+    model = SimpleWorkflow.__new__(SimpleWorkflow)
+    model.priors = {"theta": {"mean": 0.0, "sd": 1.0, "link": "identity"}}
+    model.simulate = lambda n_datasets: {"theta": np.array([0.0, 1.0, 2.0])}
+    model.sample_posterior = lambda **kwargs: {
+        "theta": np.array([[0.0, 0.2], [1.0, 1.2], [2.0, 2.2]])
+    }
+
+    fig = diagnostics.plot_parameter_recovery(
+        model,
+        n_datasets=3,
+        num_samples=2,
+        params=None,
+        metrics=["corr", "ccc", "rmse"],
+        n_cols=3,
+    )
+
+    title = fig.axes[0].get_title()
+    assert "corr=" in title
+    assert "CCC=" in title
+    assert "RMSE=" in title
+    plt.close(fig)
+
+
+def test_simple_workflow_plot_parameter_recovery_rejects_bad_metrics():
+    """Parameter recovery should reject empty or unsupported metrics."""
+
+    model = SimpleWorkflow.__new__(SimpleWorkflow)
+    model.priors = {"theta": {"mean": 0.0, "sd": 1.0, "link": "identity"}}
+    model.simulate = lambda n_datasets: {"theta": np.array([0.0, 1.0, 2.0])}
+    model.sample_posterior = lambda **kwargs: {
+        "theta": np.array([[0.0, 0.2], [1.0, 1.2], [2.0, 2.2]])
+    }
+
+    with pytest.raises(ValueError, match="unsupported"):
+        model.plot_parameter_recovery(n_datasets=3, num_samples=2, metrics="bad")
+    with pytest.raises(ValueError, match="at least one"):
+        model.plot_parameter_recovery(n_datasets=3, num_samples=2, metrics=[])
+
+
+def test_hierarchical_workflow_plot_population_recovery_limits_params():
+    """Population recovery plots should honor requested group parameter keys."""
+
+    model = HierarchicalWorkflow.__new__(HierarchicalWorkflow)
+    model.priors = {
+        "theta": {"mean": 0.0, "sd": 1.0, "link": "identity"},
+        "scale": {"mean": 0.0, "sd": 1.0, "link": "log"},
+    }
+    simulated = {
+        "theta_mu": np.array([0.0, 1.0, 2.0]),
+        "theta_sigma": np.array([0.5, 0.6, 0.7]),
+        "scale_mu": np.array([1.0, 2.0, 3.0]),
+    }
+    samples = {
+        "theta_mu": np.array([[0.0, 0.2], [1.0, 1.2], [2.0, 2.2]]),
+        "theta_sigma": np.array([[0.4, 0.6], [0.5, 0.7], [0.6, 0.8]]),
+        "scale_mu": np.array([[1.0, 1.2], [2.0, 2.2], [3.0, 3.2]]),
+    }
+    model.simulate = lambda n_datasets: simulated
+    model.sample_group_posterior = lambda **kwargs: samples
+
+    fig = model.plot_population_recovery(
+        n_datasets=3,
+        num_samples=2,
+        params=["theta_mu"],
+    )
+
+    assert len(fig.axes) == 1
+    assert fig.axes[0].get_title().startswith("theta_mu")
+    assert "corr=" in fig.axes[0].get_title()
+    plt.close(fig)
+
+
+def test_evaluation_diagnostics_plot_population_recovery_direct_call():
+    """Population recovery plotting should be directly available in evaluation."""
+
+    model = HierarchicalWorkflow.__new__(HierarchicalWorkflow)
+    model.priors = {"theta": {"mean": 0.0, "sd": 1.0, "link": "identity"}}
+    model.simulate = lambda n_datasets: {"theta_mu": np.array([0.0, 1.0, 2.0])}
+    model.sample_group_posterior = lambda **kwargs: {
+        "theta_mu": np.array([[0.0, 0.2], [1.0, 1.2], [2.0, 2.2]])
+    }
+
+    fig = diagnostics.plot_population_recovery(
+        model,
+        n_datasets=3,
+        num_samples=2,
+        params=["theta_mu"],
+        metrics=["corr", "ccc", "rmse"],
+        n_cols=3,
+    )
+
+    title = fig.axes[0].get_title()
+    assert "corr=" in title
+    assert "CCC=" in title
+    assert "RMSE=" in title
+    plt.close(fig)
+
+
+def test_hierarchical_workflow_plot_population_recovery_rejects_bad_metrics():
+    """Population recovery should reject empty or unsupported metrics."""
+
+    model = HierarchicalWorkflow.__new__(HierarchicalWorkflow)
+    model.priors = {"theta": {"mean": 0.0, "sd": 1.0, "link": "identity"}}
+    model.simulate = lambda n_datasets: {"theta_mu": np.array([0.0, 1.0, 2.0])}
+    model.sample_group_posterior = lambda **kwargs: {
+        "theta_mu": np.array([[0.0, 0.2], [1.0, 1.2], [2.0, 2.2]])
+    }
+
+    with pytest.raises(ValueError, match="unsupported"):
+        model.plot_population_recovery(n_datasets=3, num_samples=2, metrics="bad")
+    with pytest.raises(ValueError, match="at least one"):
+        model.plot_population_recovery(n_datasets=3, num_samples=2, metrics=[])
+
+
+def test_hierarchical_workflow_plot_random_recovery_ignores_padded_truth():
+    """Random recovery should plot one dataset-level metric per parameter."""
+
+    model = HierarchicalWorkflow.__new__(HierarchicalWorkflow)
+    model.keep_subject_truth = ["theta"]
+    simulated = {
+        "theta_subj": np.array([[0.1, 0.2, np.nan], [0.3, 0.4, np.nan]]),
+        "data": np.zeros((2, 3, 1)),
+    }
+    random_samples = {
+        "theta": np.array(
+            [
+                [[0.11, 0.21, np.nan], [0.12, 0.22, np.nan]],
+                [[0.31, 0.41, np.nan], [0.32, 0.42, np.nan]],
+            ]
+        )
+    }
+    model.simulate = lambda n_datasets: simulated
+    model.sample_group_posterior = lambda **kwargs: {"theta_mu_raw": np.zeros((2, 2))}
+    model.sample_random_posterior = lambda **kwargs: random_samples
+
+    fig = model.plot_random_recovery(n_datasets=2, num_samples=2)
+
+    offsets = fig.axes[0].collections[0].get_offsets()
+    assert offsets.shape[0] == 2
+    assert fig.axes[0].get_ylabel() == "corr"
+    plt.close(fig)
+
+
+def test_evaluation_diagnostics_plot_random_recovery_direct_call():
+    """Random recovery should facet when multiple metrics are requested."""
+
+    model = HierarchicalWorkflow.__new__(HierarchicalWorkflow)
+    model.keep_subject_truth = ["theta"]
+    simulated = {
+        "theta_subj": np.array([[0.1, 0.2], [0.3, 0.4]]),
+        "data": np.zeros((2, 2, 1)),
+    }
+    model.simulate = lambda n_datasets: simulated
+    model.sample_group_posterior = lambda **kwargs: {"theta_mu_raw": np.zeros((2, 2))}
+    model.sample_random_posterior = lambda **kwargs: {
+        "theta": np.array(
+            [
+                [[0.11, 0.21], [0.12, 0.22]],
+                [[0.31, 0.41], [0.32, 0.42]],
+            ]
+        )
+    }
+
+    fig = diagnostics.plot_random_recovery(
+        model,
+        n_datasets=2,
+        num_samples=2,
+        params=None,
+        metrics=["corr", "ccc", "rmse"],
+        n_cols=3,
+    )
+
+    assert [ax.get_title() for ax in fig.axes] == ["corr", "ccc", "RMSE"]
+    plt.close(fig)
+
+
+def test_hierarchical_workflow_plot_random_recovery_rejects_bad_metrics():
+    """Random recovery should reject empty or unsupported metric requests."""
+
+    model = HierarchicalWorkflow.__new__(HierarchicalWorkflow)
+    model.keep_subject_truth = ["theta"]
+    model.simulate = lambda n_datasets: {
+        "theta_subj": np.array([[0.1, 0.2]]),
+        "data": np.zeros((1, 2, 1)),
+    }
+    model.sample_group_posterior = lambda **kwargs: {"theta_mu_raw": np.zeros((1, 2))}
+    model.sample_random_posterior = lambda **kwargs: {
+        "theta": np.array([[[0.11, 0.21], [0.12, 0.22]]])
+    }
+
+    with pytest.raises(ValueError, match="unsupported"):
+        model.plot_random_recovery(n_datasets=1, num_samples=2, metrics="bad")
+    with pytest.raises(ValueError, match="at least one"):
+        model.plot_random_recovery(n_datasets=1, num_samples=2, metrics=[])
+
+
+def test_hierarchical_workflow_plot_random_recovery_requires_subject_truth():
+    """Random recovery needs saved subject truth from keep_subject_truth."""
+
+    model = HierarchicalWorkflow.__new__(HierarchicalWorkflow)
+    model.keep_subject_truth = []
+    model.simulate = lambda n_datasets: {"data": np.zeros((1, 1, 1))}
+    model.sample_group_posterior = lambda **kwargs: {"theta_mu_raw": np.zeros((1, 1))}
+    model.sample_random_posterior = lambda **kwargs: {"theta": np.zeros((1, 1, 1))}
+
+    with pytest.raises(ValueError, match="keep_subject_truth"):
+        model.plot_random_recovery(n_datasets=1, num_samples=1)
 
 
 def test_train_workflow_stores_effective_training_config():
