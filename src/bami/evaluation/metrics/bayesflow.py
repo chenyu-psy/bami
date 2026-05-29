@@ -609,6 +609,229 @@ def _sample_posterior(
     return samples
 
 
+def _check_ci(ci: float) -> float:
+    """Return a validated credible-interval width.
+
+    Parameters
+    ----------
+    ci
+        Credible-interval mass, such as ``0.95`` for a central 95% interval.
+
+    Returns
+    -------
+    float
+        Validated interval mass.
+    """
+
+    ci = float(ci)
+    if ci <= 0 or ci >= 1:
+        raise ValueError("ci must be between 0 and 1.")
+    return ci
+
+
+def _squeeze_trailing_singletons(
+    arr: np.ndarray,
+    min_ndim: int = 1,
+) -> np.ndarray:
+    """Remove trailing singleton dimensions that do not name parameters.
+
+    Parameters
+    ----------
+    arr
+        Posterior draw array from BayesFlow or a transform helper.
+    min_ndim
+        Number of dimensions that should be preserved even when the final
+        dimension has length one.
+
+    Returns
+    -------
+    numpy.ndarray
+        Array with trailing length-one dimensions removed.
+    """
+
+    out = arr
+    while out.ndim > min_ndim and out.shape[-1] == 1:
+        out = np.squeeze(out, axis=-1)
+    return out
+
+
+def _summarize_draws(draws: np.ndarray, ci: float) -> dict[str, float]:
+    """Summarize one vector of posterior draws.
+
+    Parameters
+    ----------
+    draws
+        One-dimensional posterior draws for one parameter and dataset.
+    ci
+        Credible-interval mass.
+
+    Returns
+    -------
+    dict[str, float]
+        Posterior mean, standard deviation, and central interval bounds.
+    """
+
+    draw_arr = np.asarray(draws, dtype=float).reshape(-1)
+    alpha = (1.0 - ci) / 2.0
+    sd = np.std(draw_arr, ddof=1) if draw_arr.size > 1 else 0.0
+    return {
+        "estimate": float(np.mean(draw_arr)),
+        "sd": float(sd),
+        "ci_lower": float(np.quantile(draw_arr, alpha)),
+        "ci_upper": float(np.quantile(draw_arr, 1.0 - alpha)),
+    }
+
+
+def _lookup_ess(
+    ess: Mapping[str, object] | None,
+    param: str,
+    index: tuple[int, ...] = (),
+) -> float:
+    """Return an ESS value for one summary row.
+
+    Parameters
+    ----------
+    ess
+        Optional mapping from parameter name to scalar or indexed ESS values.
+    param
+        Parameter name being summarized.
+    index
+        Dataset and subject indexes for this row, if present.
+
+    Returns
+    -------
+    float
+        Matching ESS value, or ``nan`` when none is available.
+    """
+
+    if ess is None or param not in ess:
+        return np.nan
+    value = np.asarray(ess[param])
+    if value.ndim == 0:
+        return float(value)
+    if len(index) == value.ndim and all(i < s for i, s in zip(index, value.shape)):
+        return float(value[index])
+    if value.ndim == 1 and index and index[-1] < value.shape[0]:
+        return float(value[index[-1]])
+    return np.nan
+
+
+def summarize_group_parameters(
+    samples: Mapping[str, np.ndarray],
+    ci: float = 0.95,
+    ess: Mapping[str, object] | None = None,
+) -> pd.DataFrame:
+    """Summarize group-level posterior draws in a researcher-friendly table.
+
+    Parameters
+    ----------
+    samples
+        Mapping from group-level parameter name to posterior draws. Arrays
+        should be shaped ``(n_datasets, n_samples)`` for batched data, or
+        ``(n_samples,)`` for one dataset without an explicit dataset axis.
+    ci
+        Central credible-interval width.
+    ess
+        Optional mapping from parameter name to effective sample size. Values
+        may be scalars or one value per dataset.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Table with ``param``, ``estimate``, ``sd``, ``ci_lower``, ``ci_upper``,
+        and ``ess``. A ``dataset_id`` column is included when the samples have
+        an explicit dataset axis.
+    """
+
+    ci = _check_ci(ci)
+    rows = []
+    for param, values in samples.items():
+        arr = _squeeze_trailing_singletons(np.asarray(values, dtype=float))
+        if arr.ndim == 1:
+            row = {"param": param, **_summarize_draws(arr, ci)}
+            row["ess"] = _lookup_ess(ess, param)
+            rows.append(row)
+        elif arr.ndim == 2:
+            for dataset_id in range(arr.shape[0]):
+                row = {
+                    "dataset_id": int(dataset_id),
+                    "param": param,
+                    **_summarize_draws(arr[dataset_id, :], ci),
+                }
+                row["ess"] = _lookup_ess(ess, param, (dataset_id,))
+                rows.append(row)
+        else:
+            raise ValueError(
+                "group parameter samples must have shape (n_samples,) or "
+                "(n_datasets, n_samples)."
+            )
+    return pd.DataFrame(rows)
+
+
+def summarize_random_parameters(
+    samples: Mapping[str, np.ndarray],
+    ci: float = 0.95,
+    ess: Mapping[str, object] | None = None,
+) -> pd.DataFrame:
+    """Summarize subject-level posterior draws in a long table.
+
+    Parameters
+    ----------
+    samples
+        Mapping from subject-level parameter name to posterior draws. Arrays
+        should be shaped ``(n_samples, n_subjects)`` for one dataset or
+        ``(n_datasets, n_samples, n_subjects)`` for batched data.
+    ci
+        Central credible-interval width.
+    ess
+        Optional mapping from parameter name to effective sample size. Values
+        may be scalars, one value per subject, or one value per dataset and
+        subject.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Table with ``param``, ``subject_id``, ``estimate``, ``sd``,
+        ``ci_lower``, ``ci_upper``, and ``ess``. A ``dataset_id`` column is
+        included when the samples have an explicit dataset axis.
+    """
+
+    ci = _check_ci(ci)
+    rows = []
+    for param, values in samples.items():
+        arr = _squeeze_trailing_singletons(
+            np.asarray(values, dtype=float),
+            min_ndim=3,
+        )
+        if arr.ndim == 2:
+            for subject_id in range(arr.shape[1]):
+                row = {
+                    "subject_id": int(subject_id),
+                    "param": param,
+                    **_summarize_draws(arr[:, subject_id], ci),
+                }
+                row["ess"] = _lookup_ess(ess, param, (subject_id,))
+                rows.append(row)
+        elif arr.ndim == 3:
+            for dataset_id in range(arr.shape[0]):
+                for subject_id in range(arr.shape[2]):
+                    row = {
+                        "dataset_id": int(dataset_id),
+                        "subject_id": int(subject_id),
+                        "param": param,
+                        **_summarize_draws(arr[dataset_id, :, subject_id], ci),
+                    }
+                    row["ess"] = _lookup_ess(ess, param, (dataset_id, subject_id))
+                    rows.append(row)
+        else:
+            raise ValueError(
+                "random parameter samples must have shape "
+                "(n_samples, n_subjects) or "
+                "(n_datasets, n_samples, n_subjects)."
+            )
+    return pd.DataFrame(rows)
+
+
 def _check_indexed_subject_recovery_allowed(workflow) -> None:
     """Fail clearly when indexed subject outputs are not subject-aligned.
 
@@ -763,7 +986,12 @@ def sample_posterior(
     approximator_kwargs: Mapping | None = None,
     sample_batch_size: int | None = None,
 ) -> Mapping[str, np.ndarray]:
-    """Sample posterior draws and apply public-space transforms when present.
+    """Sample posterior draws from a BayesFlow workflow.
+
+    This is a lower-level compatibility helper for code that already works
+    directly with ``model.workflow``. New user-facing scripts should usually
+    call ``model.sample_posterior(...)`` for simple workflows or
+    ``model.sample_group_posterior(...)`` for hierarchical group parameters.
 
     Parameters
     ----------

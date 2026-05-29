@@ -101,7 +101,7 @@ model = SimpleWorkflow(
     n_trials=25,
 )
 
-sim = model.workflow.simulate(4)
+sim = model.simulate(4)
 print(sim["data"].shape)
 ```
 
@@ -132,7 +132,7 @@ model = HierarchicalWorkflow(
     transform_samples=transform_hierarchical_samples,
 )
 
-sim = model.workflow.simulate(4)
+sim = model.simulate(4)
 print(sim["data"].shape)
 ```
 
@@ -214,20 +214,41 @@ without changing the simulator interface.
 After constructing a workflow object, the usual actions are:
 
 ```python
-sim = model.workflow.simulate(4)
+sim = model.simulate(4)
 history = model.train_workflow(
     max_epochs=50,
     validation_data=64,
     file="saved_workflows/my_workflow.keras",
     ...
 )
-posterior = model.convert_posterior(raw_samples)
+posterior = model.sample_posterior(test_data=sim, num_samples=500)
 ```
 
-`model.workflow.simulate(...)` is the BayesFlow workflow method created by
-`bami`. The `train_workflow(...)` method fits the workflow and can load or save
-a trained workflow file. The `convert_posterior(...)` method transforms raw
-posterior samples to user-facing parameter names and scales.
+`model.simulate(...)` generates prior-predictive data using the workflow's
+data-shape contract. The `train_workflow(...)` method fits the workflow and can
+load or save a trained workflow file. Simple workflows use
+`model.sample_posterior(...)` for posterior draws; hierarchical workflows use
+`model.sample_group_posterior(...)` for group-level posterior draws.
+
+For hierarchical subject-level parameters, train the random-effect workflow
+separately. By default it inherits the training settings saved by
+`train_workflow(...)`, while using its own saved workflow file:
+
+```python
+model.train_random_workflow(file="saved_workflows/my_random_workflow.keras")
+```
+
+::: bami.workflows.simple.SimpleWorkflow.simulate
+    options:
+      show_root_heading: true
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: bami.workflows.hierarchical.HierarchicalWorkflow.simulate
+    options:
+      show_root_heading: true
+      show_root_toc_entry: false
+      heading_level: 3
 
 ::: bami.workflows.simple.SimpleWorkflow.train_workflow
     options:
@@ -235,11 +256,35 @@ posterior samples to user-facing parameter names and scales.
       show_root_toc_entry: false
       heading_level: 3
 
-::: bami.workflows.simple.SimpleWorkflow.convert_posterior
+::: bami.workflows.simple.SimpleWorkflow.sample_posterior
     options:
       show_root_heading: true
       show_root_toc_entry: false
       heading_level: 3
+
+::: bami.workflows.hierarchical.HierarchicalWorkflow.sample_group_posterior
+    options:
+      show_root_heading: true
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: bami.workflows.hierarchical.HierarchicalWorkflow.train_random_workflow
+    options:
+      show_root_heading: true
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: bami.workflows.hierarchical.HierarchicalWorkflow.sample_random_posterior
+    options:
+      show_root_heading: true
+      show_root_toc_entry: false
+      heading_level: 3
+
+For trial-level random-effect sampling, `sample_random_posterior()` uses the
+model's trial design. Fixed trial models warn when observed subjects have a
+different trial count than `n_trials`. Flexible trial models can receive raw
+variable-length subject trial arrays; the function pads them to the model's
+maximum trial count and adds the `active_trial` mask before sampling.
 
 ## Constructor reference
 

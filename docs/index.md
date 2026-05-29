@@ -75,7 +75,7 @@ model = SimpleWorkflow(
     n_trials=25,
 )
 
-sim = model.workflow.simulate(4)
+sim = model.simulate(4)
 print(sim["data"].shape)
 ```
 

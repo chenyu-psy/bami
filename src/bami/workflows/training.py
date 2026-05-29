@@ -11,6 +11,80 @@ import numpy as np
 
 from bami.inference.runtime import configure_torch_device
 
+TRAIN_CONFIG_DEFAULTS = {
+    "max_epochs": 100,
+    "initial_epochs": 10,
+    "n_batch": 5000,
+    "batch_size": 32,
+    "validation_data": 200,
+    "patience": 5,
+    "min_delta": 0.1,
+    "workers": 4,
+    "max_queue_size": 16,
+    "torch_device": None,
+    "verbose": 1,
+    "fit_kwargs": {},
+}
+
+
+def make_train_config(
+    *,
+    max_epochs=100,
+    initial_epochs=10,
+    n_batch=5000,
+    batch_size=32,
+    validation_data=200,
+    patience=5,
+    min_delta=0.1,
+    workers=4,
+    max_queue_size=16,
+    torch_device=None,
+    verbose=1,
+    fit_kwargs=None,
+) -> dict:
+    """Return a reusable workflow training configuration.
+
+    Parameters
+    ----------
+    max_epochs, initial_epochs, n_batch, batch_size, validation_data, patience,
+    min_delta, workers, max_queue_size, torch_device, verbose
+        Training settings shared by group and random workflows.
+    fit_kwargs
+        Optional keyword arguments passed to BayesFlow's ``fit_online``.
+
+    Returns
+    -------
+    dict
+        Training configuration without saved-file settings.
+    """
+
+    return {
+        "max_epochs": max_epochs,
+        "initial_epochs": initial_epochs,
+        "n_batch": n_batch,
+        "batch_size": batch_size,
+        "validation_data": validation_data,
+        "patience": patience,
+        "min_delta": min_delta,
+        "workers": workers,
+        "max_queue_size": max_queue_size,
+        "torch_device": torch_device,
+        "verbose": verbose,
+        "fit_kwargs": dict(fit_kwargs or {}),
+    }
+
+
+def default_train_config() -> dict:
+    """Return a fresh copy of the default training configuration.
+
+    Returns
+    -------
+    dict
+        Default training settings used by ``train_workflow``.
+    """
+
+    return make_train_config(**TRAIN_CONFIG_DEFAULTS)
+
 
 def train_workflow(
     model,
@@ -68,6 +142,22 @@ def train_workflow(
         BayesFlow training history, or ``{"loaded": True, "file": path}`` when
         an existing saved workflow file is reused.
     """
+
+    config = make_train_config(
+        max_epochs=max_epochs,
+        initial_epochs=initial_epochs,
+        n_batch=n_batch,
+        batch_size=batch_size,
+        validation_data=validation_data,
+        patience=patience,
+        min_delta=min_delta,
+        workers=workers,
+        max_queue_size=max_queue_size,
+        torch_device=torch_device,
+        verbose=verbose,
+        fit_kwargs=kwargs,
+    )
+    model._train_config = config
 
     selected_device = configure_torch_device(torch_device)
     if torch_device is not None:

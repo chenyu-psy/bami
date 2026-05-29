@@ -29,12 +29,12 @@ workflows. Model-specific helpers are documented on each simulator page.
 Use these functions after training when you want population-level or
 individual-level parameter estimates.
 
-[`sample_posterior`](parameters.md)
-: Sample population or group-level posterior draws and apply public-scale
-parameter transforms when available.
+[`model.sample_posterior`, `model.sample_group_posterior`, and `model.sample_random_posterior`](parameters.md)
+: Sample simple, group-level, or subject-level random-effect posterior draws
+and apply public-scale parameter transforms when available.
 
 [`summarize_subject_posterior`](parameters.md)
-: Summarize individual-level parameter posteriors from observed subject counts.
+: Legacy posthoc helper for observed subject counts.
 
 ## Evaluation
 

@@ -28,7 +28,7 @@ model = SimpleWorkflow(
     n_coupling_layers=2,
 )
 
-sim = model.workflow.simulate(5)
+sim = model.simulate(5)
 print(sim["data"].shape)
 ```
 
@@ -69,7 +69,7 @@ model = SimpleWorkflow(
     n_coupling_layers=2,
 )
 
-sim = model.workflow.simulate(5)
+sim = model.simulate(5)
 print(sim["data"].shape)
 ```
 

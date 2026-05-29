@@ -66,7 +66,7 @@ model = SimpleWorkflow(
     n_trials=25,
 )
 
-simulated = model.workflow.simulate(4)
+simulated = model.simulate(4)
 print(simulated["data"].shape)
 ```
 
@@ -223,12 +223,11 @@ inspected, saved, or plotted with project-specific code.
 from bami.evaluation import (
     estimate_population_recovery,
     plot_population_recovery,
-    sample_posterior,
 )
 
-test_data = model.workflow.simulate(100)
-samples = sample_posterior(model.workflow, test_data, num_samples=500)
-recovery_df = estimate_population_recovery(model, test_data, samples)
+test_data = model.simulate(100)
+samples = model.sample_posterior(test_data=test_data, num_samples=500)
+recovery_df = estimate_population_recovery(test_data=test_data, samples=samples)
 fig = plot_population_recovery(recovery_df)
 ```
 

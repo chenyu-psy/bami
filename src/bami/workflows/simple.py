@@ -635,6 +635,65 @@ class SimpleWorkflow:
 
         return transform_simple_samples(samples, self.priors)
 
+    def simulate(self, n_datasets: int) -> Mapping[str, np.ndarray]:
+        """Simulate datasets from this simple workflow.
+
+        Parameters
+        ----------
+        n_datasets
+            Number of simulated datasets to draw from the workflow prior and
+            simulator.
+
+        Returns
+        -------
+        Mapping[str, numpy.ndarray]
+            Simulated data and parameter truth arrays using the workflow's
+            data-shape contract.
+        """
+
+        return self.workflow.simulate(n_datasets)
+
+    def sample_posterior(
+        self,
+        test_data: Mapping[str, np.ndarray],
+        num_samples: int,
+        approximator_kwargs: Mapping | None = None,
+        sample_batch_size: int | None = None,
+    ) -> Mapping[str, np.ndarray]:
+        """Draw posterior samples for this simple workflow.
+
+        Parameters
+        ----------
+        test_data
+            Observed or simulated data dictionary passed to the trained
+            BayesFlow workflow. In examples this is often created with
+            ``model.simulate(n_datasets)``.
+        num_samples
+            Number of posterior draws to request for each dataset.
+        approximator_kwargs
+            Optional keyword arguments forwarded to BayesFlow's
+            ``workflow.sample`` method.
+        sample_batch_size
+            Optional number of datasets to sample at once. Use this when many
+            datasets would otherwise exceed accelerator memory.
+
+        Returns
+        -------
+        Mapping[str, numpy.ndarray]
+            Posterior draws on the public parameter scale. The sample axis is
+            the same as BayesFlow's output, usually axis 1 for batched data.
+        """
+
+        from bami.evaluation.metrics.bayesflow import _sample_posterior
+
+        return _sample_posterior(
+            workflow=self.workflow,
+            test_data=test_data,
+            num_samples=num_samples,
+            approximator_kwargs=approximator_kwargs,
+            sample_batch_size=sample_batch_size,
+        )
+
     def train_workflow(
         self,
         max_epochs=100,

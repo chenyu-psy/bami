@@ -23,6 +23,8 @@ Metric helpers return long-format tables for recovery and diagnostics.
       heading_level: 3
       members:
         - sample_posterior
+        - summarize_group_parameters
+        - summarize_random_parameters
         - estimate_population_recovery
         - estimate_fixed_individual_recovery
         - estimate_flex_individual_recovery
@@ -52,28 +54,23 @@ Metric helpers return long-format tables for recovery and diagnostics.
 ```python
 from bami.evaluation.metrics import compute_ccc, compute_corr, compute_rmse
 from bami.evaluation.metrics.bayesflow import (
-    bf_calibration,
-    bf_coverage,
     bf_flex_ind_recovery,
     bf_ind_recovery,
-    bf_pop_recovery,
-    bf_zscore,
     estimate_fixed_individual_recovery,
     estimate_flex_individual_recovery,
     estimate_population_recovery,
-    sample_posterior,
+    summarize_group_parameters,
 )
 
 
-# `model` is a trained SimpleWorkflow or HierarchicalWorkflow object.
-# `test_data` is usually produced by model.workflow.simulate(n_datasets).
-test_data = model.workflow.simulate(20)
-
-samples = sample_posterior(
-    workflow=model.workflow,
+# `model` is a trained SimpleWorkflow object.
+# `test_data` is usually produced by model.simulate(n_datasets).
+test_data = model.simulate(20)
+samples = model.sample_posterior(
     test_data=test_data,
     num_samples=500,
 )
+sample_summary = summarize_group_parameters(samples)
 
 population_rows = estimate_population_recovery(
     test_data=test_data,
@@ -101,14 +98,13 @@ flex_individual_rows = estimate_flex_individual_recovery(
     n_jobs=1,
 )
 
-pop_rows = bf_pop_recovery(model.workflow, test_data=20, num_samples=500)
 ind_rows = bf_ind_recovery(model=model, test_data=20, num_samples=500)
 flex_rows = bf_flex_ind_recovery(model=model, test_data=20, num_group_samples=500)
-
-calibration_rows = bf_calibration(model.workflow, test_data=20, num_samples=500)
-coverage_rows = bf_coverage(model.workflow, test_data=20, num_samples=500)
-zscore_rows = bf_zscore(model.workflow, test_data=20, num_samples=500)
 ```
+
+Some lower-level BayesFlow diagnostic helpers still accept the underlying
+BayesFlow workflow for compatibility. Prefer the model-level sampling methods
+and dataframe summary helpers for ordinary analysis scripts.
 
 The brms functions define the future shared interface. They currently raise
 `NotImplementedError`.

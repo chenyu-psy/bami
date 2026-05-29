@@ -34,7 +34,7 @@ model = HierarchicalWorkflow(
     transform_samples=transform_hierarchical_samples,
 )
 
-sim = model.workflow.simulate(5)
+sim = model.simulate(5)
 print(sim["data"].shape)
 ```
 
@@ -74,7 +74,7 @@ model = HierarchicalWorkflow(
     transform_samples=transform_hierarchical_samples,
 )
 
-sim = model.workflow.simulate(6)
+sim = model.simulate(6)
 print(sim["data"].shape)
 ```
 
