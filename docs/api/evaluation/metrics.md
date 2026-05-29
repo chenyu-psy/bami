@@ -1,6 +1,26 @@
 # Metrics
 
-Metric helpers return long-format tables for recovery and diagnostics.
+Metric helpers return long-format tables for summaries and recovery checks.
+
+## Data aggregation
+
+::: bami.evaluation.metrics.aggregate
+    options:
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+      members:
+        - aggregate_data
+
+## Recovery metrics
+
+::: bami.evaluation.metrics.recovery
+    options:
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+      members:
+        - estimate_recovery
 
 ## Scalar metrics
 
@@ -14,115 +34,68 @@ Metric helpers return long-format tables for recovery and diagnostics.
         - compute_ccc
         - compute_rmse
 
-## BayesFlow metrics
-
-::: bami.evaluation.metrics.bayesflow
-    options:
-      show_root_heading: false
-      show_root_toc_entry: false
-      heading_level: 3
-      members:
-        - sample_posterior
-        - summarize_group_parameters
-        - summarize_random_parameters
-        - estimate_population_recovery
-        - estimate_fixed_individual_recovery
-        - estimate_flex_individual_recovery
-        - bf_pop_recovery
-        - bf_ind_recovery
-        - bf_flex_ind_recovery
-        - bf_calibration
-        - bf_coverage
-        - bf_zscore
-
-## brms metrics
-
-::: bami.evaluation.metrics.brms
-    options:
-      show_root_heading: false
-      show_root_toc_entry: false
-      heading_level: 3
-      members:
-        - brms_pop_recovery
-        - brms_ind_recovery
-        - brms_calibration
-        - brms_coverage
-        - brms_zscore
-
 ## Examples
 
 ```python
-from bami.evaluation.metrics import compute_ccc, compute_corr, compute_rmse
-from bami.evaluation.metrics.bayesflow import (
-    bf_flex_ind_recovery,
-    bf_ind_recovery,
-    estimate_fixed_individual_recovery,
-    estimate_flex_individual_recovery,
-    estimate_population_recovery,
-    summarize_group_parameters,
+import pandas as pd
+
+from bami.evaluation.metrics import (
+    aggregate_data,
+    compute_ccc,
+    compute_corr,
+    compute_rmse,
+    estimate_recovery,
 )
 
 
-# `model` is a trained SimpleWorkflow object.
-# `test_data` is usually produced by model.simulate(n_datasets).
-test_data = model.simulate(20)
-samples = model.sample_posterior(
-    test_data=test_data,
-    num_samples=500,
+# Simulated and estimated values are long-format tables.
+simulated_values = pd.DataFrame(
+    {
+        "dataset_id": [0, 1, 0, 1],
+        "param": ["c", "c", "kappa", "kappa"],
+        "simulated_value": [0.8, 1.2, 2.0, 3.0],
+    }
 )
-sample_summary = summarize_group_parameters(samples)
-
-population_rows = estimate_population_recovery(
-    test_data=test_data,
-    samples=samples,
+estimated_values = pd.DataFrame(
+    {
+        "dataset_id": [0, 1, 0, 1],
+        "param": ["c", "c", "kappa", "kappa"],
+        "estimated_value": [0.9, 1.1, 2.2, 2.8],
+    }
+)
+recovery_metrics = estimate_recovery(
+    simulated_values,
+    estimated_values,
+    group_by="param",
+    metrics=["ccc", "rmse"],
 )
 
-truth = population_rows["true_value"]
-estimate = population_rows["est_value"]
+value_summary = aggregate_data(
+    estimated_values,
+    variables="estimated_value",
+    group_by="param",
+    stats=["mean", "se", "lower_ci", "upper_ci"],
+)
+
+truth = simulated_values["simulated_value"]
+estimate = estimated_values["estimated_value"]
 
 r = compute_corr(truth, estimate)
 ccc = compute_ccc(truth, estimate)
 rmse = compute_rmse(truth, estimate)
-
-fixed_individual_rows = estimate_fixed_individual_recovery(
-    test_data=test_data,
-    samples=samples,
-    base_params=["theta"],
-)
-
-flex_individual_rows = estimate_flex_individual_recovery(
-    model=model,
-    test_data=test_data,
-    samples=samples,
-    base_params=["theta"],
-    n_jobs=1,
-)
-
-ind_rows = bf_ind_recovery(model=model, test_data=20, num_samples=500)
-flex_rows = bf_flex_ind_recovery(model=model, test_data=20, num_group_samples=500)
 ```
 
-Some lower-level BayesFlow diagnostic helpers still accept the underlying
-BayesFlow workflow for compatibility. Prefer the model-level sampling methods
-and dataframe summary helpers for ordinary analysis scripts.
-
-The brms functions define the future shared interface. They currently raise
-`NotImplementedError`.
+For advanced posterior diagnostics, call BayesFlow directly through the model
+workflow:
 
 ```python
-from bami.evaluation.metrics.brms import (
-    brms_calibration,
-    brms_coverage,
-    brms_ind_recovery,
-    brms_pop_recovery,
-    brms_zscore,
+diagnostics = model.workflow.compute_default_diagnostics(
+    test_data=test_data,
+    num_samples=500,
+    variable_keys=None,
+    as_data_frame=True,
 )
-
-
-# Planned future usage once brms extraction is implemented:
-# population_rows = brms_pop_recovery(fit)
-# individual_rows = brms_ind_recovery(fit)
-# calibration_rows = brms_calibration(fit)
-# coverage_rows = brms_coverage(fit)
-# zscore_rows = brms_zscore(fit)
 ```
+
+These diagnostics are BayesFlow-native outputs rather than bami evaluation
+tables.

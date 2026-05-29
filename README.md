@@ -173,8 +173,8 @@ from 50 to 200.
 and circular-response summary utilities.
 
 `bami.inference`
-: Prior drawing, parameter transforms, saved-workflow helpers, runtime settings,
-and posthoc subject-level sampling.
+: Prior drawing, parameter transforms, saved-workflow helpers, and runtime
+settings.
 
 `bami.recovery`
 : Recovery workflows for comparing true and estimated parameters.

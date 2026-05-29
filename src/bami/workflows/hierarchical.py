@@ -592,8 +592,6 @@ class HierarchicalWorkflow:
     input_format
         Optional input-format helper. If supplied, it formats
         simulator rows and trial counts before padding and masking.
-    posthoc_estimator
-        Optional estimator class for posthoc subject-level posterior summaries.
     summary_dim, n_coupling_layers
         BayesFlow network settings.
     transform_samples
@@ -628,9 +626,6 @@ class HierarchicalWorkflow:
         row_transform: Callable | None = None,
         trial_feature_scale: float | None = None,
         input_format: InputFormat | None = None,
-        posthoc_estimator: Callable | None = None,
-        posthoc_kwargs: Mapping | None = None,
-        posthoc_kind: str | None = None,
         summary_dim: int = 64,
         n_coupling_layers: int = 10,
         transform_samples: Callable | None = None,
@@ -685,9 +680,6 @@ class HierarchicalWorkflow:
         self.row_transform = row_transform
         self.trial_feature_scale = trial_feature_scale
         self.input_format = SimpleWorkflow._check_input_format(input_format)
-        self.posthoc_estimator = posthoc_estimator
-        self.posthoc_kwargs = dict(posthoc_kwargs or {})
-        self.posthoc_kind = posthoc_kind
         self.workflow_family = f"{self.subject_design}_hierarchical"
         self.subject_id_mode = "exchangeable"
         self.summary_dim = int(summary_dim)
@@ -1511,7 +1503,6 @@ class HierarchicalWorkflow:
         self.workflow.observation = self.observation
         self.workflow.indexed_subject_recovery_aligned = False
         self.workflow.subject_id_mode = "exchangeable"
-        self.workflow.posthoc_kind = self.posthoc_kind
         self.workflow.input_format = self.input_format
         self.workflow.input_format_metadata = self._input_format_metadata()
         self.workflow.obs_names = self._workflow_obs_names()
@@ -1638,7 +1629,7 @@ class HierarchicalWorkflow:
             and scales.
         """
 
-        from bami.evaluation.metrics.bayesflow import _sample_posterior
+        from bami.workflows._sampling import _sample_posterior
 
         return _sample_posterior(
             workflow=self.workflow,
@@ -2410,19 +2401,6 @@ class HierarchicalWorkflow:
             if self.include_mask:
                 data[0, subject_id, col] = 1.0
         return data, subject_ids
-
-    def build_posthoc_estimator(self):
-        """Build the configured posthoc estimator for this workflow.
-
-        Returns
-        -------
-        object
-            Estimator exposing ``estimate_subjects``.
-        """
-
-        if self.posthoc_estimator is None:
-            raise ValueError("This workflow does not define a posthoc estimator.")
-        return self.posthoc_estimator(**self.posthoc_kwargs)
 
     def _input_format_metadata(self) -> dict | None:
         """Return JSON-safe input-format metadata for this workflow.

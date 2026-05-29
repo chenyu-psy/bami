@@ -13,11 +13,13 @@ import pandas as pd
 from bami.evaluation import (
     compute_ccc,
     compute_corr,
+    validate_recovery_contract,
+)
+from bami.evaluation.metrics.bayesflow import (
+    _sample_posterior,
     estimate_fixed_individual_recovery,
     estimate_flex_individual_recovery,
     estimate_population_recovery,
-    sample_posterior,
-    validate_recovery_contract,
 )
 
 
@@ -616,7 +618,8 @@ def _model_conditions(
     Returns
     -------
     dict[str, np.ndarray]
-        Conditions dictionary suitable for ``sample_posterior``.
+        Conditions dictionary suitable for the internal BayesFlow posterior
+        sampling helper.
     """
 
     if fit_name == "flex_simple":
@@ -741,7 +744,7 @@ def _estimate_simple_subject_recovery(
     else:
         raise ValueError("fit_name must be 'fixed_simple' or 'flex_simple'.")
 
-    samples = sample_posterior(
+    samples = _sample_posterior(
         workflow=fit_model.workflow,
         test_data=conditions,
         num_samples=posterior_samples,
@@ -805,8 +808,8 @@ def _prepare_flex_subject_recovery_data(
     Returns
     -------
     dict[str, np.ndarray]
-        Flex-formatted data and subject truth arrays used by
-        ``estimate_flex_individual_recovery``.
+        Flex-formatted data and subject truth arrays retained for the future
+        exchangeable hierarchy recovery table.
     """
 
     conditions = _flex_conditions_from_counts(
@@ -907,11 +910,11 @@ def recover(
     sample_batch_size : int, optional
         Optional sampling batch size for BayesFlow.
     n_candidates, min_ess, max_candidates, batch_candidates, adaptive
-        Posthoc controls for flexible hierarchical subject recovery.
+        Retained for the future flexible hierarchical subject recovery route.
     show_progress : bool, optional
         Whether to print progress from slower recovery routines.
     n_jobs : int, optional
-        Worker count for flexible hierarchical posthoc recovery.
+        Retained for the future flexible hierarchical subject recovery route.
 
     Returns
     -------
@@ -927,7 +930,7 @@ def recover(
         sim_data=sim_data,
         n_trials=n_trials,
     )
-    samples = sample_posterior(
+    samples = _sample_posterior(
         workflow=fit_model.workflow,
         test_data=conditions,
         num_samples=posterior_samples,

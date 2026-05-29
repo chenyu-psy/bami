@@ -231,31 +231,6 @@ def _dataset_recovery_correlations(
     return out
 
 
-def _low_ess_note(df: pd.DataFrame) -> str | None:
-    """Summarize low-ESS row frequency when posthoc diagnostics are available.
-
-    Parameters
-    ----------
-    df
-        Recovery table that may contain ``posthoc_status``.
-
-    Returns
-    -------
-    str | None
-        Text note for the figure, or ``None`` when no status column exists.
-    """
-
-    if "posthoc_status" not in df.columns:
-        return None
-
-    individual_df = df[df["level"] == "individual"]
-    if individual_df.empty:
-        return None
-
-    low_rate = np.mean(individual_df["posthoc_status"].astype(str) == "low_ess")
-    return f"low ESS rows: {100 * low_rate:.1f}%"
-
-
 def _trial_recovery_correlations(
     df: pd.DataFrame, pars: list[str] | None
 ) -> pd.DataFrame:
@@ -446,18 +421,6 @@ def plot_individual_recovery(
     ax.set_xlabel("Parameter")
     ax.set_ylabel("Correlation")
     ax.grid(axis="y", alpha=0.25)
-
-    note = _low_ess_note(df)
-    if note is not None:
-        ax.text(
-            0.99,
-            0.02,
-            note,
-            transform=ax.transAxes,
-            ha="right",
-            va="bottom",
-            fontsize=9,
-        )
 
     fig.tight_layout()
     return fig

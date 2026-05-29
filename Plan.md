@@ -37,13 +37,23 @@ documentation, or tests.
   probability normalization, output shape, optional jitter, optional scaling,
   padding, and trial-count features.
 
-### 3. Review Existing Evaluation and Recovery Tools
+### 3. Review Existing Evaluation Tools
 
-- Check recovery tables, scalar metrics, diagnostics, and plotting helpers.
-- Improve consistency of parameter naming and table contracts.
-- Add or refine tests for current edge cases such as missing parameters, fixed
-  parameters, and small simulated datasets.
-- Keep plots readable without requiring users to customize many arguments.
+Partly completed.
+
+- Evaluation metrics/API cleanup is complete. Public evaluation metrics now
+  keep only dataframe-first helpers and scalar metrics:
+  `aggregate_data`, `estimate_recovery`, `compute_corr`, `compute_ccc`, and
+  `compute_rmse`.
+- Posterior sampling is exposed through workflow/model methods, not through
+  evaluation metrics.
+- Old BayesFlow/brms diagnostic wrappers, placeholder metrics, and public
+  recovery wrappers have been removed from evaluation.
+- Evaluation plotting functions are not yet reviewed. Check plot API names,
+  function order, table contracts, visual defaults, and whether diagnostic
+  plots still belong in the public docs.
+- Recovery workflows in `bami.recovery` are intentionally deferred for a
+  separate review and redesign.
 
 ### 4. Polish Website Structure
 
@@ -72,18 +82,53 @@ documentation, or tests.
   command that failed.
 - Keep unresolved issues separate from next-milestone feature ideas.
 
+### 7. Review Runtime Compatibility and Defaults
+
+- Check package behavior on common researcher systems: macOS, Linux, and
+  Windows where feasible.
+- Check whether users can choose an appropriate computation backend or device
+  without editing package internals.
+- Review backend/device documentation so CPU-only users, Apple Silicon users,
+  and GPU users know what to expect.
+- Audit default training settings for low-performance laptops and CPU-only
+  environments. Defaults should be safe and teachable, even if advanced users
+  later increase epochs, batch sizes, or worker counts.
+- Add small smoke tests or documented manual checks for backend/device setup
+  when full cross-platform CI is not available.
+- Record any unsupported platform, backend, or device limitation explicitly in
+  the docs instead of leaving users to infer it from errors.
+
 ## Current Milestone Acceptance Criteria
 
 - Existing public APIs are simple, explicit, and teachable.
 - Existing docs guide users through standard workflows before advanced
   internals.
 - Examples match current code and show expected array or dataframe shapes.
+- Runtime defaults are reasonable for CPU-only and lower-performance research
+  laptops.
+- Backend and device selection behavior is documented clearly enough that users
+  do not need to inspect internals.
+- Known platform compatibility gaps are documented with exact commands or
+  manual checks still needed.
 - Touched functions have useful docstrings.
 - Comments explain assumptions or domain reasoning instead of restating the
   code.
 - Checks pass, or remaining failures are recorded with exact commands and next
   actions.
 - No new public features are added unless required to fix current behavior.
+
+## Current Milestone Remaining Gaps
+
+- Run or document cross-platform smoke checks for macOS, Linux, and Windows.
+- Review backend/device selection for BayesFlow/Keras/Torch and decide whether
+  `bami` needs a documented user-facing setting beyond current
+  `torch_device` training arguments.
+- Review whether default training values such as epochs, batches, batch size,
+  workers, and queue size are friendly to CPU-only and low-memory machines.
+- Add documentation that explains recommended settings for low-performance
+  laptops versus faster GPU machines.
+- Record any checks that cannot be run locally, including the exact command or
+  CI setup needed later.
 
 ## Next Milestone: New Features and Research Prototypes
 
@@ -94,64 +139,39 @@ code review and website polish milestone is complete.
 
 - Keep the package organized by responsibility: `workflows`, `parameters`,
   `evaluation`, `inference`, `simulators`, `inputs`, and `recovery`.
-- Add a user-facing `parameters` layer for posterior-sampling functions.
-  `SimpleWorkflow` should expose `model.sample_posterior(...)`.
-  `HierarchicalWorkflow` should expose `model.sample_group_posterior(...)`
-  and later `model.sample_random_posterior(...)` so output levels are explicit.
-- Add thin workflow wrappers only when the model is the natural first argument:
-  `model.simulate(...)`, `model.sample_posterior(...)` for simple workflows,
-  `model.sample_group_posterior(...)` for hierarchical workflows,
-  `model.recover(...)`, and later `model.train_random_workflow(...)` and
-  `model.sample_random_posterior(...)`.
-- Do not add `HierarchicalWorkflow.sample_posterior(...)`; the group and random
-  posterior outputs should stay named separately to avoid ambiguity.
+- Evaluate whether a separate user-facing `parameters` module is still needed
+  now that model-level sampling methods exist. Do not add a new layer unless it
+  removes real user confusion or duplication.
+- Add `model.recover(...)` only if recovery workflows need the model object as
+  their natural first argument.
 - Do not add plot or scalar-metric wrappers to workflow classes. Plotting,
   diagnostics, and metrics should keep operating on arrays or data frames in
   `evaluation`.
-- Add `summarize_group_parameters(...)` and `summarize_random_parameters(...)`
-  to `evaluation`. These functions should consume posterior samples or draws
-  and return data frames with `estimate` (posterior mean), `sd`, `ci_lower`,
-  `ci_upper`, and `ess` when ESS is available.
-- Keep the current `summarize_subject_posterior(...)` behavior for now, but
-  mark it as an upcoming legacy/outdated path. Do not remove it until the
-  BayesFlow-only random workflow route is validated.
-- Reserve the public names `sample_random_posterior(...)` and
-  `model.sample_random_posterior(...)`, but do not implement this behavior in
-  this cleanup pass.
+- Redesign `bami.recovery` from dataframe-first inputs and current model-level
+  posterior sampling. Do not restore the old evaluation-owned `bf_*` or
+  `estimate_*` recovery wrappers.
 
 ### 2. Adjust API Reference Around New Ownership
 
-- Update the Parameters page to feature `model.sample_posterior(...)` for
-  simple workflows, `model.sample_group_posterior(...)` for hierarchical group
-  parameters, and to reserve space for future random-effect posterior sampling.
-- Update the Evaluation page to document `summarize_group_parameters(...)` and
-  `summarize_random_parameters(...)` as data-frame summaries of posterior
-  draws.
-- Move `summarize_subject_posterior(...)` out of the main Parameters workflow
-  path and label it as a legacy/approximate posthoc helper that remains
-  available while the random-posterior sampling design is evaluated.
-- Update examples so users can avoid reaching through `model.workflow` for
-  common tasks. Prefer `model.simulate(...)` and
-  `model.sample_posterior(...)` or `model.sample_group_posterior(...)` in
-  user-facing docs.
-- Do not keep `sample_posterior(model.workflow, ...)` as a documented route.
-  If a compatibility shim remains temporarily, make it warn or fail clearly and
-  tell users to pass the `bami` model object instead.
+- Continue checking API reference pages for old examples that reach through
+  `model.workflow` for common tasks.
+- Keep user-facing docs on model-level sampling methods. Do not reintroduce
+  `bami.evaluation.sample_posterior(workflow, ...)`.
 
 ### 3. Design `sample_random_posterior`
 
-- Use a BayesFlow-only subject-level posterior workflow first. Do not introduce
-  PyMC into the near-term random-posterior design.
-- Prefer the user-facing flow `model.train_random_workflow(file=...,
-  overwrite=False)` followed by `model.sample_random_posterior(observed_data)`.
-- `sample_random_posterior(...)` should use cached group posterior samples when
-  available, or internally sample group posterior from the same `observed_data`
-  when needed.
+- Validate the BayesFlow-only random workflow route on real examples and
+  recovery-style checks.
+- Keep the user-facing flow explicit:
+  `model.train_random_workflow(file=..., overwrite=False)`,
+  `group_samples = model.sample_group_posterior(...)`, then
+  `model.sample_random_posterior(observed_data, group_samples)`.
+- `sample_random_posterior(...)` requires explicit `group_samples`; it should
+  not estimate group parameters internally from subject-level `observed_data`.
 - Preserve the simulator-first BayesFlow workflow and avoid analytic likelihood
   requirements.
-- Treat the existing likelihood-weighted posthoc path as legacy and pending
-  deprecation. Keep it available until the random workflow produces validated
-  random-effect posterior draws.
+- The likelihood-weighted posthoc path has been removed. Future subject-level
+  recovery tables should be built from random-effect posterior draws.
 - Move PyMC compatibility to a future advanced compatibility investigation, not
   an active implementation target for this milestone.
 
@@ -207,6 +227,91 @@ code review and website polish milestone is complete.
 - Do not add PyMC as a required dependency.
 
 ## Completed Work
+
+### Evaluation Metrics API Cleanup
+
+Completed.
+
+- Replaced posterior-specific `summarize_*` helpers with
+  `aggregate_data(...)`, which summarizes one or more numeric columns by
+  optional grouping columns.
+- Added `estimate_recovery(...)` as the single dataframe-first recovery metric
+  helper for paired simulated and estimated long tables.
+- Removed public `sample_posterior` from `bami.evaluation`; posterior sampling
+  remains model-owned through `SimpleWorkflow.sample_posterior(...)`,
+  `HierarchicalWorkflow.sample_group_posterior(...)`, and
+  `HierarchicalWorkflow.sample_random_posterior(...)`.
+- Removed old `bf_*` and brms placeholder metrics from evaluation exports and
+  documentation.
+- Deleted the legacy `evaluation.metrics.bayesflow` implementation and moved
+  the remaining internal posterior sampling helper to
+  `bami.workflows._sampling`.
+- Reorganized the Evaluation metrics documentation around data aggregation,
+  recovery metrics, and scalar metrics, and increased the MkDocs TOC depth so
+  function names appear in the page table of contents.
+- `uv run pytest tests/test_evaluation_scalar_metrics.py` passed.
+- `uv run pytest tests/test_evaluation_contracts.py tests/test_evaluation_plots.py`
+  passed as regression coverage only; the plotting API and docs still need a
+  separate design/readability review.
+- `uv run pytest tests/test_evaluation_metrics_bayesflow.py` passed after
+  narrowing it to workflow sampling and random-posterior behavior.
+- `uv run ruff check src/bami/workflows src/bami/evaluation tests/test_evaluation_metrics_bayesflow.py`
+  passed.
+- `uv run mkdocs build` passed with the upstream Material for MkDocs 2.0
+  warning only.
+
+### Model-Owned Posterior Sampling APIs
+
+Completed.
+
+- Added `model.simulate(...)` wrappers so examples no longer need to call
+  `model.workflow.simulate(...)` for ordinary use.
+- Added `SimpleWorkflow.sample_posterior(...)` for simple parameter posterior
+  draws and `HierarchicalWorkflow.sample_group_posterior(...)` for group-level
+  hierarchical draws.
+- Kept `HierarchicalWorkflow.sample_posterior(...)` absent so group and
+  subject-level outputs stay explicit.
+- Later evaluation cleanup removed the temporary `summarize_*` helpers and the
+  public `bami.evaluation.sample_posterior(...)` compatibility helper.
+- Updated README, API pages, and examples to use model-level simulation and
+  posterior sampling.
+- `uv run pytest` passed with the existing Keras/Torch NumPy deprecation
+  warnings only.
+- `uv run ruff check src tests` passed.
+- Touched-file `uv run black --check ...` passed.
+- `uv run mkdocs build` passed with the upstream Material for MkDocs 2.0
+  warning only.
+
+### BayesFlow-Only Random-Effect Workflow Prototype
+
+Completed.
+
+- Added `HierarchicalWorkflow.train_random_workflow(...)` as a separate
+  subject-level random-effect workflow trained on standardized deviations
+  such as `theta_z`.
+- `train_workflow(...)` now stores its effective training config on the model;
+  `train_random_workflow(..., inherit_config=True)` inherits that config and
+  applies explicit overrides.
+- Added `HierarchicalWorkflow.sample_random_posterior(observed_data,
+  group_samples, ...)`, using explicit group posterior draws from
+  `model.sample_group_posterior(...)`.
+- Random posterior sampling combines paired group draws and sampled
+  standardized deviations into public subject-level parameters while
+  preserving output shape `(n_datasets, n_samples, n_subjects)`.
+- Trial-level random sampling now follows the model's trial design: fixed
+  trial mismatches warn but continue, and flexible trial inputs are padded and
+  given `active_trial` masks internally when needed.
+- Removed the public `summarize_subject_posterior(...)` helper, legacy posthoc
+  internals, and likelihood-distribution helpers used only by posthoc
+  candidate weighting.
+- Kept exchangeable hierarchy individual recovery function names as
+  placeholders that point users to `sample_random_posterior(...)` until the
+  recovery tables are rebuilt.
+- `uv run pytest tests/test_evaluation_metrics_bayesflow.py` passed.
+- `uv run ruff check src tests` passed.
+- Touched-file `uv run black --check ...` passed.
+- `uv run mkdocs build` passed with the upstream Material for MkDocs 2.0
+  warning only.
 
 ### Advanced Docs and Unified Training API
 

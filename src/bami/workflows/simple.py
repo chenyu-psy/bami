@@ -684,7 +684,7 @@ class SimpleWorkflow:
             the same as BayesFlow's output, usually axis 1 for batched data.
         """
 
-        from bami.evaluation.metrics.bayesflow import _sample_posterior
+        from bami.workflows._sampling import _sample_posterior
 
         return _sample_posterior(
             workflow=self.workflow,

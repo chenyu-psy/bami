@@ -39,7 +39,6 @@ nav:
               - Input formats: api/inputs/formats.md
           - Inference:
               - Prior utilities: api/inference/priors-transforms.md
-              - Likelihood distributions: api/inference/distributions.md
               - Saved workflows and runtime: api/inference/checkpoints-runtime.md
   - Examples:
       - Simple SDM workflow: examples/simple-sdm.md
@@ -54,7 +53,7 @@ markdown_extensions:
   - pymdownx.snippets
   - toc:
       permalink: true
-      toc_depth: 2
+      toc_depth: 3
 
 plugins:
   - search

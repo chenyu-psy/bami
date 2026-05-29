@@ -100,32 +100,3 @@ than the training `n_trials`, because the resulting subject posteriors may be
 less reliable. Flexible trial models accept raw variable-length subject trial
 arrays and add the padding and `active_trial` mask internally, as long as the
 observed trial counts fit inside `n_trials_range`.
-
-## Legacy posthoc subject parameters
-
-Use `summarize_subject_posterior()` only when you specifically need the current
-posthoc helper for observed subject counts in a hierarchical workflow. This
-approximate route remains available while the random-effect posterior sampling
-design is evaluated.
-
-::: bami.inference.posthoc.summarize_subject_posterior
-    options:
-      show_root_heading: true
-      show_root_toc_entry: false
-      heading_level: 3
-
-```python
-from bami.inference import summarize_subject_posterior
-
-
-subject_params = summarize_subject_posterior(
-    model,
-    counts,
-    group_samples=group_samples,
-    n_candidates=4000,
-)
-```
-
-The returned table contains one row per subject and parameter, including
-posterior medians, intervals, and diagnostic columns such as effective sample
-size.

@@ -4,7 +4,7 @@ The package is organized by responsibility:
 - workflows: model-agnostic BayesFlow workflow builders
 - inputs: input-format helpers for workflow data rows
 - simulators: preset model-family simulator functions
-- inference: priors, transforms, saved workflows, runtime, and posthoc helpers
+- inference: priors, transforms, saved workflows, and runtime helpers
 - recovery: parameter-recovery analysis helpers
 - evaluation: reusable plotting and metric contracts for model assessment
 - data_ops: tabular data transformation helpers

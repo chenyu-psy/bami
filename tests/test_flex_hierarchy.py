@@ -1,12 +1,9 @@
 """Tests for the flexible-subject hierarchy model."""
 
 import numpy as np
-import pandas as pd
 
 from fixtures_model_specs import M3_SPEC, m3_activation
-from bami.inference import summarize_subject_posterior, transform_hierarchical_samples
-from bami.inference.posthoc import M3PosthocEstimator
-from bami.inference.priors import log_sigma_key, mu_raw_key
+from bami.inference import transform_hierarchical_samples
 from bami.simulators.m3 import prop_m3, simulate_m3_custom
 from bami.workflows import HierarchicalWorkflow
 
@@ -56,15 +53,6 @@ def _build_small_model(
         row_transform=row_transform,
         trial_feature_scale=n_trials_range[1] - 1 if normalize_counts else None,
         transform_samples=transform_hierarchical_samples,
-        posthoc_estimator=M3PosthocEstimator,
-        posthoc_kwargs={
-            "n_options": M3_SPEC["n_options"],
-            "rule": M3_SPEC["rule"],
-            "priors": priors,
-            "const_params": {"b": priors["b"]},
-            "hier_params": {name: priors[name] for name in ["a", "c", "ra", "rc"]},
-        },
-        posthoc_kind="m3",
     )
 
 
@@ -122,8 +110,8 @@ def test_flex_normalized_input_keeps_shape_and_scales_counts():
     assert data[0, 0, 6] == 1.0
 
 
-def test_flex_normalized_simulator_keeps_raw_counts_for_posthoc():
-    """Normalized simulations should retain integer counts for posthoc recovery."""
+def test_flex_normalized_simulator_keeps_raw_counts():
+    """Normalized simulations should retain integer counts for diagnostics."""
 
     np.random.seed(2026)
     model = _build_small_model(
@@ -156,140 +144,3 @@ def test_flex_workflow_infers_stochastic_sd_when_configured():
     assert "a_log_sigma" in adapter_text
     assert "c_mu_raw" not in adapter_text
     assert "c_log_sigma" not in adapter_text
-
-
-def test_posthoc_estimator_returns_one_row_per_subject_and_param():
-    """Posthoc estimates should return long subject-by-parameter summaries."""
-
-    model = _build_small_model()
-    counts = pd.DataFrame(
-        {
-            "subject_id": ["s1", "s2"],
-            "correct": [4, 2],
-            "other": [1, 2],
-            "dist": [1, 1],
-            "other_dist": [0, 1],
-            "new": [1, 2],
-        }
-    )
-    group_samples = {}
-    for base_param in ["a", "c", "ra", "rc"]:
-        group_samples[mu_raw_key(base_param)] = np.full((1, 30), 0.0, dtype=np.float32)
-        group_samples[log_sigma_key(base_param)] = np.full(
-            (1, 30),
-            np.log(0.1),
-            dtype=np.float32,
-        )
-
-    out = summarize_subject_posterior(
-        model,
-        counts,
-        group_samples=group_samples,
-        n_candidates=60,
-        random_seed=2026,
-    )
-
-    assert out.shape[0] == 2 * 4
-    assert set(out["subject_id"]) == {"s1", "s2"}
-    assert set(out["param"]) == {"a", "c", "ra", "rc"}
-    assert {
-        "median",
-        "lower",
-        "upper",
-        "ess",
-        "ess_ratio",
-        "max_weight",
-        "n_candidates_used",
-        "posthoc_status",
-    }.issubset(out.columns)
-
-
-def test_posthoc_adaptive_adds_candidates_when_ess_is_low():
-    """Adaptive posthoc should add candidates until ESS improves or hits the cap."""
-
-    model = _build_small_model()
-    counts = np.array([[4, 1, 1, 0, 1]], dtype=np.float32)
-    group_samples = {}
-    for base_param in ["a", "c", "ra", "rc"]:
-        group_samples[mu_raw_key(base_param)] = np.full((1, 20), 0.0, dtype=np.float32)
-        group_samples[log_sigma_key(base_param)] = np.full(
-            (1, 20),
-            np.log(0.1),
-            dtype=np.float32,
-        )
-
-    out = summarize_subject_posterior(
-        model,
-        counts,
-        group_samples=group_samples,
-        n_candidates=5,
-        min_ess=50,
-        max_candidates=12,
-        batch_candidates=4,
-        random_seed=2026,
-    )
-
-    assert set(out["n_candidates_used"]) == {12}
-    assert set(out["posthoc_status"]) == {"low_ess"}
-
-
-def test_posthoc_can_disable_adaptive_candidate_growth():
-    """Non-adaptive posthoc should use exactly the requested candidate count."""
-
-    model = _build_small_model()
-    counts = np.array([[4, 1, 1, 0, 1]], dtype=np.float32)
-    group_samples = {}
-    for base_param in ["a", "c", "ra", "rc"]:
-        group_samples[mu_raw_key(base_param)] = np.full((1, 20), 0.0, dtype=np.float32)
-        group_samples[log_sigma_key(base_param)] = np.full(
-            (1, 20),
-            np.log(0.1),
-            dtype=np.float32,
-        )
-
-    out = summarize_subject_posterior(
-        model,
-        counts,
-        group_samples=group_samples,
-        n_candidates=5,
-        min_ess=50,
-        max_candidates=12,
-        batch_candidates=4,
-        adaptive=False,
-        random_seed=2026,
-    )
-
-    assert set(out["n_candidates_used"]) == {5}
-    assert set(out["posthoc_status"]) == {"low_ess"}
-
-
-def test_posthoc_estimator_handles_arbitrary_log_sigma_draws():
-    """Posthoc drawing should accept unconstrained log-sigma posterior samples."""
-
-    model = _build_small_model()
-    counts = np.array([[4, 1, 1, 0, 1]], dtype=np.float32)
-    group_samples = {}
-    for base_param in ["a", "c", "ra", "rc"]:
-        group_samples[mu_raw_key(base_param)] = np.linspace(
-            -0.5,
-            0.5,
-            20,
-            dtype=np.float32,
-        ).reshape(1, -1)
-        group_samples[log_sigma_key(base_param)] = np.linspace(
-            -3.0,
-            1.0,
-            20,
-            dtype=np.float32,
-        ).reshape(1, -1)
-
-    out = summarize_subject_posterior(
-        model,
-        counts,
-        group_samples=group_samples,
-        n_candidates=40,
-        random_seed=2026,
-    )
-
-    assert out.shape[0] == 4
-    assert np.all(np.isfinite(out["median"]))

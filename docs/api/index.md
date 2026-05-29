@@ -33,33 +33,27 @@ individual-level parameter estimates.
 : Sample simple, group-level, or subject-level random-effect posterior draws
 and apply public-scale parameter transforms when available.
 
-[`summarize_subject_posterior`](parameters.md)
-: Legacy posthoc helper for observed subject counts.
-
 ## Evaluation
 
-Use these functions to check recovery, diagnostics, and model performance.
+Use these functions to check recovery and model performance.
 
 [`compute_corr`, `compute_ccc`, and `compute_rmse`](evaluation/metrics.md)
 : Compute scalar agreement and error metrics for true vs. estimated values.
 
-[`estimate_population_recovery`](evaluation/metrics.md)
-: Convert posterior samples into population-level recovery rows.
+[`estimate_recovery`](evaluation/metrics.md)
+: Compute grouped recovery metrics from simulated and estimated value tables.
 
-[`estimate_fixed_individual_recovery`](evaluation/metrics.md)
-: Convert fixed-subject posterior samples into individual recovery rows.
+Advanced BayesFlow posterior diagnostics can be computed directly with
+`model.workflow.compute_default_diagnostics(...)`.
 
-[`estimate_flex_individual_recovery`](evaluation/metrics.md)
-: Estimate individual recovery for flexible hierarchical workflows.
-
-[`bf_pop_recovery`](evaluation/metrics.md)
-: Sample and tabulate BayesFlow population recovery in one call.
-
-[`bf_ind_recovery`](evaluation/metrics.md)
-: Sample and tabulate BayesFlow individual recovery in one call.
-
-[`bf_calibration`, `bf_coverage`, and `bf_zscore`](evaluation/metrics.md)
-: Compute diagnostic metric tables from BayesFlow defaults.
+```python
+diagnostics = model.workflow.compute_default_diagnostics(
+    test_data=test_data,
+    num_samples=500,
+    variable_keys=None,
+    as_data_frame=True,
+)
+```
 
 [`plot_population_recovery`](evaluation/plots-contracts.md)
 : Plot population-level true vs. estimated parameter recovery.
@@ -103,14 +97,11 @@ Use these functions when workflow input rows need explicit trial-count encoding.
 
 ### Inference
 
-Use these helpers when you need prior/link utilities, likelihood building
-blocks, or saved-workflow and runtime controls.
+Use these helpers when you need prior/link utilities or saved-workflow and
+runtime controls.
 
 [`Prior utilities`](inference/priors-transforms.md)
 : Define priors and transform parameters between raw and public scales.
-
-[`Likelihood distributions`](inference/distributions.md)
-: Use distribution helpers for likelihood-oriented workflows.
 
 [`Saved workflows and runtime`](inference/checkpoints-runtime.md)
 : Load, save, and inspect fitted workflow runtime details.

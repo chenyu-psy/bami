@@ -1,8 +1,8 @@
-"""Model evaluation utilities shared across BayesFlow and brms workflows.
+"""Model evaluation utilities for recovery, summaries, and plots.
 
 This package exposes:
 - contract validators for table schemas used in evaluation plots
-- backend-specific metric builders (BayesFlow implemented, brms placeholders)
+- metric helpers for recovery and scalar summaries
 - backend-agnostic plotting functions that consume contract tables
 """
 
@@ -15,26 +15,11 @@ from .contracts import (
     validate_diagnostic_contract,
 )
 from .metrics import (
+    aggregate_data,
+    estimate_recovery,
     compute_ccc,
     compute_corr,
     compute_rmse,
-    bf_pop_recovery,
-    bf_ind_recovery,
-    bf_flex_ind_recovery,
-    sample_posterior,
-    summarize_group_parameters,
-    summarize_random_parameters,
-    estimate_population_recovery,
-    estimate_fixed_individual_recovery,
-    estimate_flex_individual_recovery,
-    bf_calibration,
-    bf_coverage,
-    bf_zscore,
-    brms_pop_recovery,
-    brms_ind_recovery,
-    brms_calibration,
-    brms_coverage,
-    brms_zscore,
 )
 from .plots import (
     plot_population_recovery,
@@ -52,26 +37,11 @@ __all__ = [
     "VALID_LEVELS",
     "validate_recovery_contract",
     "validate_diagnostic_contract",
+    "aggregate_data",
+    "estimate_recovery",
     "compute_ccc",
     "compute_corr",
     "compute_rmse",
-    "bf_pop_recovery",
-    "bf_ind_recovery",
-    "bf_flex_ind_recovery",
-    "sample_posterior",
-    "summarize_group_parameters",
-    "summarize_random_parameters",
-    "estimate_population_recovery",
-    "estimate_fixed_individual_recovery",
-    "estimate_flex_individual_recovery",
-    "bf_calibration",
-    "bf_coverage",
-    "bf_zscore",
-    "brms_pop_recovery",
-    "brms_ind_recovery",
-    "brms_calibration",
-    "brms_coverage",
-    "brms_zscore",
     "plot_population_recovery",
     "plot_individual_recovery",
     "plot_trial_sensitivity_recovery",
