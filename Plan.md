@@ -90,20 +90,66 @@ documentation, or tests.
 These items are intentionally deferred. They should start only after the current
 code review and website polish milestone is complete.
 
-### 1. PyMC-Based Posthoc Estimation
+### 1. Reorganize Parameter API Ownership
 
-- Prototype an optional `PyMCPosthocEstimator` separately from the current
-  lightweight posthoc path.
-- Keep the current NumPy/Scipy posthoc path as the default for fast recovery
-  checks and multiprocessing-friendly diagnostics.
-- Do not add PyMC as a required dependency. If this project moves forward, use
-  an optional dependency group and keep imports isolated.
-- Start with one small M3 or SDM-style subject-level example.
-- Compare PyMC posthoc output with the current likelihood-weighted posthoc
-  output for model clarity, diagnostics, runtime cost, and agreement of
-  estimates.
+- Keep the package organized by responsibility: `workflows`, `parameters`,
+  `evaluation`, `inference`, `simulators`, `inputs`, and `recovery`.
+- Add a user-facing `parameters` layer for posterior-sampling functions.
+  `sample_group_posterior(...)` should replace the current user-facing
+  `sample_posterior(...)` name while keeping the old name as a compatibility
+  alias.
+- Add thin workflow wrappers only when the model is the natural first argument:
+  `model.simulate(...)`, `model.sample_group_posterior(...)`,
+  `model.recover(...)`, and later `model.train_random_likelihood(...)` and
+  `model.sample_random_posterior(...)`.
+- Do not add plot or scalar-metric wrappers to workflow classes. Plotting,
+  diagnostics, and metrics should keep operating on arrays or data frames in
+  `evaluation`.
+- Add `summarize_group_parameters(...)` and `summarize_random_parameters(...)`
+  to `evaluation`. These functions should consume posterior samples or draws
+  and return data frames with `estimate` (posterior mean), `sd`, `ci_lower`,
+  `ci_upper`, and `ess` when ESS is available.
+- Keep the current `summarize_subject_posterior(...)` behavior for now, but
+  mark it as an upcoming legacy/outdated path. Do not remove it until the
+  BayesFlow/PyMC random-posterior route is validated.
+- Reserve the public names `sample_random_posterior(...)` and
+  `model.sample_random_posterior(...)`, but do not implement PyMC behavior in
+  this cleanup pass.
 
-### 2. Multi-Condition Subject Workflows
+### 2. Adjust API Reference Around New Ownership
+
+- Update the Parameters page to feature group-level posterior sampling through
+  `sample_group_posterior(...)` and to reserve space for future random-effect
+  posterior sampling.
+- Update the Evaluation page to document `summarize_group_parameters(...)` and
+  `summarize_random_parameters(...)` as data-frame summaries of posterior
+  draws.
+- Move `summarize_subject_posterior(...)` out of the main Parameters workflow
+  path and label it as a legacy/approximate posthoc helper that remains
+  available while the random-posterior sampling design is evaluated.
+- Update examples so users can avoid reaching through `model.workflow` for
+  common tasks. Prefer `model.simulate(...)` and
+  `model.sample_group_posterior(...)` in user-facing docs.
+- Keep compatibility notes brief and researcher-facing. Explain old names only
+  where needed to help existing users migrate.
+
+### 3. Design `sample_random_posterior`
+
+- Evaluate the BayesFlow-native route before implementing PyMC-specific code:
+  train a subject-level neural likelihood or ratio estimator from the existing
+  simulator, then use PyMC only as the optional sampler over random effects.
+- Keep PyMC optional. Users should only need the PyMC extra when they call
+  `sample_random_posterior(...)`.
+- Prefer the user-facing flow
+  `model.train_random_likelihood(file=..., overwrite=False)` followed by
+  `model.sample_random_posterior(...)`.
+- Preserve the simulator-first BayesFlow workflow. Do not require users to
+  write analytic PyMC likelihoods for normal `bami` workflows.
+- Treat the existing likelihood-weighted posthoc path as a fast approximate
+  route until the neural likelihood/ratio plus PyMC design is proven reliable
+  and teachable.
+
+### 4. Multi-Condition Subject Workflows
 
 - Design workflows for subjects with multiple condition-specific datasets.
 - Distinguish shared subject parameters estimated from multiple conditions from
@@ -112,7 +158,7 @@ code review and website polish milestone is complete.
 - Define simulator, prior, posterior-table, and data-shape contracts before
   writing a public API.
 
-### 3. BayesFlow CompositionalWorkflow Evaluation
+### 5. BayesFlow CompositionalWorkflow Evaluation
 
 - Evaluate `CompositionalWorkflow` only as a candidate route for
   multi-condition or multi-dataset evidence composition.
@@ -121,7 +167,7 @@ code review and website polish milestone is complete.
 - Do not assume `CompositionalWorkflow` estimates cross-condition correlations
   by itself. The simulator and prior must represent any joint structure.
 
-### 4. Alternative Summary Networks
+### 6. Alternative Summary Networks
 
 - Track `SetTransformer` or related networks as future evaluation targets for
   exchangeable observations.
@@ -130,14 +176,14 @@ code review and website polish milestone is complete.
 - Require a short design note or small benchmark before changing defaults or
   exposing new public network configuration.
 
-### 5. Advanced BayesFlow Features
+### 7. Advanced BayesFlow Features
 
 - Consider ensembles, wrappers, and other advanced BayesFlow APIs only when
   they solve a real `bami` user problem.
 - Do not expose new BayesFlow options only because they exist.
 - Prefer clear user-facing workflows over broad compatibility layers.
 
-### 6. New Shared Simulator Abstractions
+### 8. New Shared Simulator Abstractions
 
 - Add shared helpers only if current-code review shows repeated logic that
   harms readability.
