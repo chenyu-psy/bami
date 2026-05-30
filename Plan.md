@@ -226,12 +226,28 @@ then debugs and validates the current package before new 0.3.0 features begin.
 - Prefer small, focused fixes that preserve the 0.2.1 workflow-wide contracts.
 - Do not start `MultiConditionWorkflow` implementation while compatibility bugs
   from this milestone remain unresolved.
+- Fixed Apple Silicon MPS training compatibility for BayesFlow/Keras Torch
+  workflows. When users request `torch_device="mps"` and MPS is available,
+  `configure_torch_device(...)` now enables PyTorch's CPU fallback for
+  unsupported MPS operations. This handles Keras orthogonal initializer QR
+  operations such as `aten::linalg_qr.out`, while still selecting MPS for
+  supported operations.
+- The fallback environment variable is initialized during `bami` package import
+  so it is present before BayesFlow, Keras, or Torch initialize their backend.
+- Unavailable `mps` and `cuda` requests still fall back to CPU, but now print a
+  short user-facing message explaining the selected fallback device.
 
 ### 3. Validation
 
 - Add regression tests for every compatibility bug that is fixed.
 - Validate at least one representative simple workflow and one representative
   hierarchical workflow from the target usage pattern.
+- Added runtime regression tests for available MPS with CPU fallback,
+  unavailable MPS fallback, unavailable CUDA fallback, explicit CPU selection,
+  and invalid device-name errors.
+- Verified the MPS fallback path with a small Keras `Orthogonal()` initializer
+  smoke test after `configure_torch_device("mps")`; the initializer completed
+  with `PYTORCH_ENABLE_MPS_FALLBACK=1`.
 - Run the full check set after fixes:
   `uv run pytest`, `uv run ruff check .`, `uv run black --check .`, and
   `uv run mkdocs build`.
