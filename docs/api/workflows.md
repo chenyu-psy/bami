@@ -238,6 +238,31 @@ separately. By default it inherits the training settings saved by
 model.train_random_workflow(file="saved_workflows/my_random_workflow.keras")
 ```
 
+### Adjusting training size
+
+The default training settings are intended to be a reasonable starting point
+for fitting a workflow, not a fixed rule for every project. Researchers can
+increase the training settings when a simulator is fast, the model is stable,
+or a project needs a more thorough final fit.
+
+`n_batch` and `max_epochs` mainly control total training computation. Increasing
+`n_batch` gives each epoch more simulated batches. Increasing `max_epochs` gives
+early stopping more chances to continue when validation loss is still
+improving.
+
+`batch_size` mainly affects memory use during each training step and the
+stability of gradient updates. Larger batches can use more memory, while very
+small batches can make training noisier.
+
+`validation_data` affects both the cost of simulating validation datasets and
+the stability of early stopping. Larger validation sets can make validation
+loss less noisy, but they also take longer to simulate and store.
+
+`workers` and `max_queue_size` mainly affect concurrent simulation and
+prefetching. Larger values can improve throughput for fast machines and
+slow simulators, but they also increase memory pressure and can be less stable
+in notebook or cross-platform workflows.
+
 ::: bami.workflows.simple.SimpleWorkflow.simulate
     options:
       show_root_heading: true

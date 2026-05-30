@@ -18,6 +18,16 @@ directly and do not need these functions.
 
 ## Runtime
 
+`bami` currently uses the Torch backend for BayesFlow/Keras workflows.
+The `torch_device` training argument and `configure_torch_device(...)` helper
+only control Torch device selection. Use `None` to leave the current Torch
+default unchanged, or pass `"cpu"`, `"mps"`, or `"cuda"` when a script should
+request a specific Torch device.
+
+TensorFlow and JAX backends are not part of the current tested `bami` workflow
+contract. Supporting those backends would require a separate compatibility
+review rather than just changing `torch_device`.
+
 ::: bami.inference.runtime
     options:
       show_root_heading: false

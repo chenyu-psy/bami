@@ -25,6 +25,14 @@ def configure_torch_device(device: str | None = None) -> str:
         return "unchanged"
 
     requested = str(device).lower()
+    supported_devices = {"cpu", "mps", "cuda"}
+    if requested not in supported_devices:
+        raise ValueError(
+            "torch_device must be one of None, 'cpu', 'mps', or 'cuda'. "
+            "It controls the Torch device only; TensorFlow and JAX backends "
+            "are not part of the current bami workflow contract."
+        )
+
     try:
         import torch
     except Exception:
