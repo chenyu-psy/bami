@@ -21,6 +21,7 @@ import pandas as pd
 
 from bami.evaluation.metrics import aggregate_data, estimate_recovery
 from bami.simulators import simulate_sdm_simple
+from bami.utils import posterior_to_dataframe
 from bami.workflows import SimpleWorkflow
 
 
@@ -98,6 +99,8 @@ samples = model.sample_posterior(
 )
 
 print(samples["c"].shape)
+posterior_df = posterior_to_dataframe(samples, model.priors, level="simple")
+print(posterior_df.head())
 ```
 
 Typical shape:
@@ -107,7 +110,9 @@ Typical shape:
 ```
 
 The first dimension is the simulated dataset. The second dimension is the
-posterior-sample axis.
+posterior-sample axis. The sampling method returns a dictionary so workflow
+steps can still use raw keys when needed. Use `posterior_to_dataframe(...)`
+when you want a tidy table for reporting or plotting.
 
 ## Build long-format recovery tables
 

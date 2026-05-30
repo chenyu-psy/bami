@@ -1,6 +1,6 @@
 [project]
 name = "bami"
-version = "0.2.0"
+version = "0.2.1"
 description = "Bayesian amortized model inference workflows for user-defined and preset models."
 readme = "README.md"
 requires-python = ">=3.11"

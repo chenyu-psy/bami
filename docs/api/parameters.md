@@ -12,7 +12,8 @@ Most analyses need one or both levels:
 Use model-level sampling methods to draw posterior samples after training or
 loading a saved workflow. These methods keep the model object as the first
 thing researchers work with, instead of asking them to reach through
-`model.workflow`.
+`model.workflow`. They return dictionaries so downstream workflow steps can
+reuse raw posterior keys when needed.
 
 For simple workflows, call `model.sample_posterior(...)`:
 
@@ -49,7 +50,25 @@ group_samples = model.sample_group_posterior(
 
 The workflow applies its public-scale posterior conversion through
 `model.convert_posterior(...)` when one is configured, so returned samples use
-the parameter names and scales researchers normally interpret.
+the parameter names and scales researchers normally interpret. Raw keys remain
+available in the same dictionary for workflow steps such as random-effect
+sampling.
+
+To make a tidy dataframe for reporting, convert the sample dictionary
+explicitly:
+
+```python
+from bami.utils import posterior_to_dataframe
+
+posterior_df = posterior_to_dataframe(
+    group_samples,
+    model.priors,
+    level="group",
+)
+```
+
+The dataframe columns are `dataset`, `draw`, `level`, `param`, `basis`,
+`quantity`, and `value`.
 
 ## Random-effect subject parameters
 
