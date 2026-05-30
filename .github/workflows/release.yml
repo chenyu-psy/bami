@@ -65,6 +65,32 @@ jobs:
             exit 1
           fi
 
+      - name: Read release notes from changelog
+        run: |
+          python - <<'PY'
+          import re
+          import tomllib
+          from pathlib import Path
+
+          version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+          changelog = Path("CHANGELOG.md").read_text()
+          pattern = rf"^##\s+{re.escape(version)}(?:\s+-\s+[^\n]*)?\n(?P<body>.*?)(?=^##\s+|\Z)"
+          match = re.search(pattern, changelog, flags=re.MULTILINE | re.DOTALL)
+
+          if match is None:
+              raise SystemExit(
+                  f"CHANGELOG.md does not contain release notes for version {version}."
+              )
+
+          notes = match.group("body").strip()
+          if not notes:
+              raise SystemExit(
+                  f"CHANGELOG.md contains an empty release notes section for version {version}."
+              )
+
+          Path("release-notes.md").write_text(notes + "\n")
+          PY
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -72,4 +98,4 @@ jobs:
           gh release create "${{ steps.version.outputs.tag }}" \
             dist/* \
             --title "bami ${{ steps.version.outputs.version }}" \
-            --generate-notes
+            --notes-file release-notes.md
