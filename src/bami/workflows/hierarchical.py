@@ -23,17 +23,14 @@ from bami.workflows.simple import SimpleWorkflow
 class _RandomWorkflowTrainingAdapter:
     """Expose a random workflow through the shared training helper interface.
 
-    Parameters
-    ----------
-    model
-        Hierarchical workflow that owns ``random_workflow`` and random
-        validation-data handling.
+    Args:
+        model:
+            Hierarchical workflow that owns ``random_workflow`` and random
+            validation-data handling.
 
-    Returns
-    -------
-    None
-        The adapter presents ``workflow`` and ``_resolve_validation_data`` to
-        ``bami.workflows.training.train_workflow``.
+    Returns:
+        None: The adapter presents ``workflow`` and ``_resolve_validation_data`` to
+            ``bami.workflows.training.train_workflow``.
     """
 
     def __init__(self, model):
@@ -45,15 +42,12 @@ class _RandomWorkflowTrainingAdapter:
     def _resolve_validation_data(self, validation_data: int | dict) -> dict:
         """Return validation data from the parent random workflow.
 
-        Parameters
-        ----------
-        validation_data
-            Integer validation-set size or pre-simulated validation data.
+        Args:
+            validation_data:
+                Integer validation-set size or pre-simulated validation data.
 
-        Returns
-        -------
-        dict
-            Validation data dictionary for ``random_workflow``.
+        Returns:
+            dict: Validation data dictionary for ``random_workflow``.
         """
 
         return self.model._resolve_random_validation_data(validation_data)
@@ -63,19 +57,16 @@ class _RandomWorkflowTrainingAdapter:
 class NestedDeepSetSummary(bf.networks.SummaryNetwork):
     """Summarize nested subject-by-trial data with two DeepSet stages.
 
-    Parameters
-    ----------
-    summary_dim
-        Width of the learned summary at both the trial and subject levels.
-    **kwargs
-        Extra layer settings passed to the BayesFlow ``SummaryNetwork`` base.
+    Args:
+        summary_dim:
+            Width of the learned summary at both the trial and subject levels.
+            **kwargs
+            Extra layer settings passed to the BayesFlow ``SummaryNetwork`` base.
 
-    Returns
-    -------
-    None
-        The initialized layer expects data shaped
-        ``(batch, subjects, trials, features)`` and returns one group summary
-        row per batch item.
+    Returns:
+        None: The initialized layer expects data shaped
+            ``(batch, subjects, trials, features)`` and returns one group summary
+            row per batch item.
     """
 
     def __init__(self, summary_dim: int = 64, **kwargs):
@@ -89,20 +80,17 @@ class NestedDeepSetSummary(bf.networks.SummaryNetwork):
     def call(self, x, training: bool = False, **kwargs):
         """Compress trial rows within subjects, then subjects within groups.
 
-        Parameters
-        ----------
-        x
-            Nested trial data with shape ``batch x subjects x trials x
-            features``.
-        training
-            Whether the layer is being called during training.
-        **kwargs
-            Accepted for compatibility with BayesFlow summary-network calls.
+        Args:
+            x:
+                Nested trial data with shape ``batch x subjects x trials x
+                features``.
+            training:
+                Whether the layer is being called during training.
+                **kwargs
+                Accepted for compatibility with BayesFlow summary-network calls.
 
-        Returns
-        -------
-        Tensor
-            Group-level summary with shape ``batch x summary_dim``.
+        Returns:
+            Tensor: Group-level summary with shape ``batch x summary_dim``.
         """
 
         del kwargs
@@ -122,30 +110,27 @@ class NestedDeepSetSummary(bf.networks.SummaryNetwork):
 class MaskedEquivariantSetEncoder(keras.Layer):
     """Encode one padded exchangeable set with mask-aware context blocks.
 
-    Parameters
-    ----------
-    summary_dim
-        Width of the returned set summary.
-    element_widths
-        Layer widths for the element embedding network.
-    n_context_blocks
-        Number of masked context-injection blocks. Each block computes a
-        masked mean and variance over active elements, broadcasts that context
-        back to each active element, and applies a residual update.
-    post_widths
-        Layer widths for the post-pooling network.
-    activation
-        Activation function used in the hidden layers.
-    include_count_features
-        Whether to append active set-size features after masked pooling.
-    **kwargs
-        Extra layer settings passed to the Keras layer base.
+    Args:
+        summary_dim:
+            Width of the returned set summary.
+        element_widths:
+            Layer widths for the element embedding network.
+        n_context_blocks:
+            Number of masked context-injection blocks. Each block computes a
+            masked mean and variance over active elements, broadcasts that context
+            back to each active element, and applies a residual update.
+        post_widths:
+            Layer widths for the post-pooling network.
+        activation:
+            Activation function used in the hidden layers.
+        include_count_features:
+            Whether to append active set-size features after masked pooling.
+            **kwargs
+            Extra layer settings passed to the Keras layer base.
 
-    Returns
-    -------
-    None
-        The initialized layer expects values shaped ``... x set_size x
-        features`` and a mask shaped ``... x set_size``.
+    Returns:
+        None: The initialized layer expects values shaped ``... x set_size x
+            features`` and a mask shaped ``... x set_size``.
     """
 
     def __init__(
@@ -160,27 +145,24 @@ class MaskedEquivariantSetEncoder(keras.Layer):
     ):
         """Create one generic masked set encoder.
 
-        Parameters
-        ----------
-        summary_dim
-            Width of the final set summary.
-        element_widths
-            Hidden widths used before masked set context is computed.
-        n_context_blocks
-            Number of equivariant context-injection updates.
-        post_widths
-            Hidden widths after final masked pooling.
-        activation
-            Keras activation name used in hidden layers.
-        include_count_features
-            Whether to append active-fraction and log-count-fraction features.
-        **kwargs
-            Extra layer settings passed to ``keras.Layer``.
+        Args:
+            summary_dim:
+                Width of the final set summary.
+            element_widths:
+                Hidden widths used before masked set context is computed.
+            n_context_blocks:
+                Number of equivariant context-injection updates.
+            post_widths:
+                Hidden widths after final masked pooling.
+            activation:
+                Keras activation name used in hidden layers.
+            include_count_features:
+                Whether to append active-fraction and log-count-fraction features.
+                **kwargs
+                Extra layer settings passed to ``keras.Layer``.
 
-        Returns
-        -------
-        None
-            The layer is initialized for later calls.
+        Returns:
+            None: The layer is initialized for later calls.
         """
 
         super().__init__(**kwargs)
@@ -227,21 +209,18 @@ class MaskedEquivariantSetEncoder(keras.Layer):
     def call(self, values, mask, training: bool = False, **kwargs):
         """Encode active set entries while ignoring padded entries.
 
-        Parameters
-        ----------
-        values
-            Tensor shaped ``... x set_size x features``.
-        mask
-            Binary active-entry mask shaped ``... x set_size``.
-        training
-            Whether the layer is being called during training.
-        **kwargs
-            Accepted for compatibility with Keras layer calls.
+        Args:
+            values:
+                Tensor shaped ``... x set_size x features``.
+            mask:
+                Binary active-entry mask shaped ``... x set_size``.
+            training:
+                Whether the layer is being called during training.
+                **kwargs
+                Accepted for compatibility with Keras layer calls.
 
-        Returns
-        -------
-        Tensor
-            Masked set summary with the set dimension removed.
+        Returns:
+            Tensor: Masked set summary with the set dimension removed.
         """
 
         del kwargs
@@ -272,24 +251,21 @@ class MaskedEquivariantSetEncoder(keras.Layer):
     def _context_update(self, values, mask, layer, norm, training: bool = False):
         """Inject masked set context into active element representations.
 
-        Parameters
-        ----------
-        values
-            Current element representations shaped ``... x set_size x
-            features``.
-        mask
-            Binary active-entry mask shaped ``... x set_size``.
-        layer
-            Dense layer used to propose the residual element update.
-        norm
-            Layer normalization applied after the residual update.
-        training
-            Whether the layer is being called during training.
+        Args:
+            values:
+                Current element representations shaped ``... x set_size x
+                features``.
+            mask:
+                Binary active-entry mask shaped ``... x set_size``.
+            layer:
+                Dense layer used to propose the residual element update.
+            norm:
+                Layer normalization applied after the residual update.
+            training:
+                Whether the layer is being called during training.
 
-        Returns
-        -------
-        Tensor
-            Updated element representations with the same shape as ``values``.
+        Returns:
+            Tensor: Updated element representations with the same shape as ``values``.
         """
 
         mean = self._masked_mean(values, mask, axis=-2, keepdims=True)
@@ -306,21 +282,18 @@ class MaskedEquivariantSetEncoder(keras.Layer):
     def _masked_mean(values, mask, axis: int, keepdims: bool = False):
         """Average values over active set entries only.
 
-        Parameters
-        ----------
-        values
-            Encoded values to average.
-        mask
-            Binary mask matching ``values`` up to the feature dimension.
-        axis
-            Set dimension to average over.
-        keepdims
-            Whether to keep the averaged set dimension.
+        Args:
+            values:
+                Encoded values to average.
+            mask:
+                Binary mask matching ``values`` up to the feature dimension.
+            axis:
+                Set dimension to average over.
+            keepdims:
+                Whether to keep the averaged set dimension.
 
-        Returns
-        -------
-        Tensor
-            Masked mean with the selected set dimension removed.
+        Returns:
+            Tensor: Masked mean with the selected set dimension removed.
         """
 
         expanded_mask = keras.ops.expand_dims(mask, axis=-1)
@@ -334,23 +307,20 @@ class MaskedEquivariantSetEncoder(keras.Layer):
     def _masked_variance(cls, values, mask, mean, axis: int, keepdims: bool = False):
         """Return the variance over active set entries only.
 
-        Parameters
-        ----------
-        values
-            Encoded values to summarize.
-        mask
-            Binary mask matching ``values`` up to the feature dimension.
-        mean
-            Masked mean of ``values`` with ``keepdims=True`` for broadcasting.
-        axis
-            Set dimension to summarize.
-        keepdims
-            Whether to keep the summarized set dimension.
+        Args:
+            values:
+                Encoded values to summarize.
+            mask:
+                Binary mask matching ``values`` up to the feature dimension.
+            mean:
+                Masked mean of ``values`` with ``keepdims=True`` for broadcasting.
+            axis:
+                Set dimension to summarize.
+            keepdims:
+                Whether to keep the summarized set dimension.
 
-        Returns
-        -------
-        Tensor
-            Masked variance over the selected set dimension.
+        Returns:
+            Tensor: Masked variance over the selected set dimension.
         """
 
         centered = values - mean
@@ -360,17 +330,14 @@ class MaskedEquivariantSetEncoder(keras.Layer):
     def _append_count_features(summary, mask):
         """Append active set-size features to a pooled summary.
 
-        Parameters
-        ----------
-        summary
-            Pooled set summary with shape ``... x features``.
-        mask
-            Binary active-entry mask with shape ``... x set_size``.
+        Args:
+            summary:
+                Pooled set summary with shape ``... x features``.
+            mask:
+                Binary active-entry mask with shape ``... x set_size``.
 
-        Returns
-        -------
-        Tensor
-            Summary with ``active_fraction`` and ``log_count_fraction`` added.
+        Returns:
+            Tensor: Summary with ``active_fraction`` and ``log_count_fraction`` added.
         """
 
         active_count = keras.ops.sum(mask, axis=-1, keepdims=True)
@@ -414,24 +381,21 @@ MaskedSetEncoder = MaskedEquivariantSetEncoder
 class MaskedNestedSummary(bf.networks.SummaryNetwork):
     """Summarize nested trial data with explicit padding masks.
 
-    Parameters
-    ----------
-    summary_dim
-        Width of the learned group summary.
-    has_trial_mask
-        Whether the final input feature is an ``active_trial`` mask. Flexible
-        trial hierarchies use this to ignore padded trials and subjects.
-    include_count_features
-        Whether each nested set encoder should retain active set-size features.
-    **kwargs
-        Extra layer settings passed to the BayesFlow ``SummaryNetwork`` base.
+    Args:
+        summary_dim:
+            Width of the learned group summary.
+        has_trial_mask:
+            Whether the final input feature is an ``active_trial`` mask. Flexible
+            trial hierarchies use this to ignore padded trials and subjects.
+        include_count_features:
+            Whether each nested set encoder should retain active set-size features.
+            **kwargs
+            Extra layer settings passed to the BayesFlow ``SummaryNetwork`` base.
 
-    Returns
-    -------
-    None
-        The initialized layer expects data shaped
-        ``(batch, subjects, trials, features)`` and returns one group summary
-        row per batch item.
+    Returns:
+        None: The initialized layer expects data shaped
+            ``(batch, subjects, trials, features)`` and returns one group summary
+            row per batch item.
     """
 
     def __init__(
@@ -459,21 +423,18 @@ class MaskedNestedSummary(bf.networks.SummaryNetwork):
     def call(self, x, training: bool = False, **kwargs):
         """Compress trials within subjects and subjects within groups.
 
-        Parameters
-        ----------
-        x
-            Nested trial data with shape ``batch x subjects x trials x
-            features``. When ``has_trial_mask`` is true, the final feature is
-            the active-trial mask and is not treated as an observed response.
-        training
-            Whether the layer is being called during training.
-        **kwargs
-            Accepted for compatibility with BayesFlow summary-network calls.
+        Args:
+            x:
+                Nested trial data with shape ``batch x subjects x trials x
+                features``. When ``has_trial_mask`` is true, the final feature is
+                the active-trial mask and is not treated as an observed response.
+            training:
+                Whether the layer is being called during training.
+                **kwargs
+                Accepted for compatibility with BayesFlow summary-network calls.
 
-        Returns
-        -------
-        Tensor
-            Group-level summary with shape ``batch x summary_dim``.
+        Returns:
+            Tensor: Group-level summary with shape ``batch x summary_dim``.
         """
 
         del kwargs
@@ -494,16 +455,13 @@ class MaskedNestedSummary(bf.networks.SummaryNetwork):
     def _split_trial_mask(self, x):
         """Return substantive trial features and the active-trial mask.
 
-        Parameters
-        ----------
-        x
-            Nested trial tensor passed to ``call``.
+        Args:
+            x:
+                Nested trial tensor passed to ``call``.
 
-        Returns
-        -------
-        tuple
-            ``(trial_features, trial_mask)`` where ``trial_mask`` has shape
-            ``batch x subjects x trials``.
+        Returns:
+            tuple: ``(trial_features, trial_mask)`` where ``trial_mask`` has shape
+                ``batch x subjects x trials``.
         """
 
         if self.has_trial_mask:
@@ -514,15 +472,12 @@ class MaskedNestedSummary(bf.networks.SummaryNetwork):
     def _subject_mask(trial_mask):
         """Return an active-subject mask inferred from active trials.
 
-        Parameters
-        ----------
-        trial_mask
-            Active-trial mask with shape ``batch x subjects x trials``.
+        Args:
+            trial_mask:
+                Active-trial mask with shape ``batch x subjects x trials``.
 
-        Returns
-        -------
-        Tensor
-            Active-subject mask with shape ``batch x subjects``.
+        Returns:
+            Tensor: Active-subject mask with shape ``batch x subjects``.
         """
 
         return keras.ops.max(trial_mask, axis=-1)
@@ -544,65 +499,48 @@ class MaskedNestedSummary(bf.networks.SummaryNetwork):
 class HierarchicalWorkflow:
     """Build a group-level BayesFlow workflow from a prior and simulator.
 
-    Parameters
-    ----------
-    name
-        Short model name attached to the BayesFlow workflow.
-    priors
-        Project prior specification using ``mean``, ``sd``, and ``link`` for
-        stochastic parameters. Scalar entries are treated as subject-level
-        constants.
-    simulator
-        Function called as ``simulator(**params, n_trials=..., rng=...,
-        **simulator_kwargs)``. For aggregate workflows, it should return one
-        subject data row. For trial workflows, it should return one row per
-        trial for that subject.
-    observation
-        Observation contract. Use ``"aggregate"`` when the simulator returns
-        one fixed-width row per subject, or ``"trial"`` when the simulator
-        returns one row per trial for each subject.
-    simulator_kwargs
-        Constant keyword arguments passed to ``simulator`` on every simulation.
-    data_width
-        Number of features returned by ``simulator`` before optional design
-        columns are appended. For new code, prefer ``obs_names`` so the column
-        meanings are visible.
-    obs_names
-        Names of simulator output columns. When supplied, ``data_width`` is
-        inferred from ``len(obs_names)``.
-    n_subjects, n_subjects_range
-        Fixed subject count or range ``(low, high)``. Provide exactly one.
-    n_trials, n_trials_range
-        Fixed trial count or range ``(low, high)``. Provide exactly one.
-    include_trial_feature
-        Whether to append the subject trial count to each data row.
-    include_mask
-        Whether to append an active-subject mask. If omitted, the mask is added
-        for flexible aggregate designs and omitted for fixed designs and nested
-        trial designs.
-    keep_subject_truth
-        Subject-level parameter names to save as ``<param>_subj`` truth arrays.
-        Use ``None`` to save all stochastic subject-level parameters, or an
-        empty list to save none.
-    raw_data_key
-        Optional output key used to save untransformed simulator rows.
-    row_transform
-        Optional function that formats one simulator row before design columns
-        are appended.
-    trial_feature_scale
-        Optional divisor used when writing the trial-count feature.
-    input_format
-        Optional input-format helper. If supplied, it formats
-        simulator rows and trial counts before padding and masking.
-    summary_dim, n_coupling_layers
-        BayesFlow network settings.
-    transform_samples
-        Optional posterior transform function.
+    Use this when each simulated dataset contains multiple subjects drawn from
+    a group distribution. Aggregate observations are one row per subject; trial
+    observations are one row per trial within each subject.
 
-    Returns
-    -------
-    None
-        The initialized object exposes ``workflow`` and ``train_workflow``.
+    Args:
+        name: Short model name attached to the BayesFlow workflow.
+        priors: Project prior specification using ``mean``, ``sd``, and
+            ``link`` for stochastic parameters. Scalar entries are subject-level
+            constants.
+        simulator: Function called as
+            ``simulator(**params, n_trials=..., rng=..., **simulator_kwargs)``.
+        observation: Use ``"aggregate"`` when the simulator returns one
+            fixed-width row per subject, or ``"trial"`` for one row per trial.
+        simulator_kwargs: Constant keyword arguments passed to ``simulator``
+            on every simulation.
+        data_width: Number of simulator features before optional design
+            columns. For new code, prefer ``obs_names``.
+        obs_names: Names of simulator output columns. When supplied,
+            ``data_width`` is inferred from ``len(obs_names)``.
+        n_subjects: Fixed subject count. Provide this or
+            ``n_subjects_range``, but not both.
+        n_subjects_range: Range ``(low, high)``; subject counts are drawn
+            from ``[low, high)``.
+        n_trials: Fixed trial count. Provide this or ``n_trials_range``, but
+            not both.
+        n_trials_range: Range ``(low, high)``; trial counts are drawn from
+            ``[low, high)``.
+        include_trial_feature: Whether to append the subject trial count to
+            each data row.
+        include_mask: Whether to append an active-subject mask.
+        keep_subject_truth: Subject-level parameter names to save as
+            ``<param>_subj`` truth arrays. Use ``None`` for all stochastic subject
+            parameters, or ``[]`` for none.
+        raw_data_key: Optional output key for untransformed simulator rows.
+        row_transform: Optional function that formats one simulator row.
+        trial_feature_scale: Optional divisor for the trial-count feature.
+        input_format: Optional helper that formats simulator rows and trial
+            counts before padding and masking.
+        summary_dim: Width of the summary network.
+        n_coupling_layers: Number of coupling layers in the inference
+            network.
+        transform_samples: Optional posterior transform function.
     """
 
     workflow_level = "hierarchical"
@@ -696,15 +634,12 @@ class HierarchicalWorkflow:
     def _draw_independent_group_prior(self, rng=np.random) -> dict[str, float]:
         """Draw one independent hierarchical group prior.
 
-        Parameters
-        ----------
-        rng
-            NumPy-compatible random generator.
+        Args:
+            rng:
+                NumPy-compatible random generator.
 
-        Returns
-        -------
-        dict[str, float]
-            Raw group means, raw log sigmas, and public group parameters.
+        Returns:
+            dict[str, float]: Raw group means, raw log sigmas, and public group parameters.
         """
 
         return self._draw_group_prior_from_spec(self.priors, rng)
@@ -715,16 +650,13 @@ class HierarchicalWorkflow:
     ) -> list[str]:
         """Return validated subject-level truth names to store.
 
-        Parameters
-        ----------
-        keep_subject_truth
-            ``None`` to store all stochastic subject-level parameters, an empty
-            sequence to store none, or a sequence of parameter names to store.
+        Args:
+            keep_subject_truth:
+                ``None`` to store all stochastic subject-level parameters, an empty
+                sequence to store none, or a sequence of parameter names to store.
 
-        Returns
-        -------
-        list[str]
-            Parameter names that simulation should save as ``<param>_subj``.
+        Returns:
+            list[str]: Parameter names that simulation should save as ``<param>_subj``.
         """
 
         stochastic_names = [
@@ -750,18 +682,15 @@ class HierarchicalWorkflow:
     ) -> dict[str, float]:
         """Draw one subject from this workflow's independent group prior.
 
-        Parameters
-        ----------
-        group_params
-            Raw group means and log sigmas from
-            ``_draw_independent_group_prior``.
-        rng
-            NumPy-compatible random generator.
+        Args:
+            group_params:
+                Raw group means and log sigmas from
+                ``_draw_independent_group_prior``.
+            rng:
+                NumPy-compatible random generator.
 
-        Returns
-        -------
-        dict[str, float]
-            Public subject-level parameters, plus scalar constants.
+        Returns:
+            dict[str, float]: Public subject-level parameters, plus scalar constants.
         """
 
         return self._draw_subject_params_from_spec(self.priors, group_params, rng)
@@ -770,17 +699,14 @@ class HierarchicalWorkflow:
     def _hierarchical_inference_variables(priors: Mapping) -> list[str]:
         """Return raw group-level variables inferred by BayesFlow.
 
-        Parameters
-        ----------
-        priors
-            Project prior specification using ``mean``, ``sd``, and ``link``
-            for stochastic parameters.
+        Args:
+            priors:
+                Project prior specification using ``mean``, ``sd``, and ``link``
+                for stochastic parameters.
 
-        Returns
-        -------
-        list[str]
-            Raw group mean keys, plus raw log-sigma keys when the prior makes
-            the group standard deviation stochastic.
+        Returns:
+            list[str]: Raw group mean keys, plus raw log-sigma keys when the prior makes
+                the group standard deviation stochastic.
         """
 
         from bami.inference.priors import (
@@ -807,17 +733,14 @@ class HierarchicalWorkflow:
     ) -> dict[str, float]:
         """Draw one independent hierarchical group prior from a spec.
 
-        Parameters
-        ----------
-        priors
-            Project prior specification using ``mean``, ``sd``, and ``link``.
-        rng
-            NumPy-compatible random generator.
+        Args:
+            priors:
+                Project prior specification using ``mean``, ``sd``, and ``link``.
+            rng:
+                NumPy-compatible random generator.
 
-        Returns
-        -------
-        dict[str, float]
-            Raw group means, raw log sigmas, and public group parameters.
+        Returns:
+            dict[str, float]: Raw group means, raw log sigmas, and public group parameters.
         """
 
         from bami.inference.priors import (
@@ -850,21 +773,18 @@ class HierarchicalWorkflow:
     ) -> dict[str, float]:
         """Draw one subject from independent group-level priors.
 
-        Parameters
-        ----------
-        priors
-            Project prior specification using ``mean``, ``sd``, and ``link``.
-        group_params
-            Raw group means and log sigmas from
-            ``_draw_group_prior_from_spec``.
-        rng
-            NumPy-compatible random generator.
+        Args:
+            priors:
+                Project prior specification using ``mean``, ``sd``, and ``link``.
+            group_params:
+                Raw group means and log sigmas from
+                ``_draw_group_prior_from_spec``.
+            rng:
+                NumPy-compatible random generator.
 
-        Returns
-        -------
-        dict[str, float]
-            Public subject-level parameters, plus scalar constants from
-            ``priors``.
+        Returns:
+            dict[str, float]: Public subject-level parameters, plus scalar constants from
+                ``priors``.
         """
 
         from bami.inference.priors import apply_link, log_sigma_key, mu_raw_key
@@ -891,19 +811,14 @@ class HierarchicalWorkflow:
     ) -> tuple[str, int | None, tuple[int, int] | None]:
         """Validate one fixed-or-flexible design count.
 
-        Parameters
-        ----------
-        fixed_value
-            Fixed count value, or ``None`` when using a range.
-        range_value
-            Two-value range, or ``None`` when using a fixed count.
-        fixed_name, range_name
-            Setting names used in error messages.
+        Args:
+            fixed_value: Fixed count value, or ``None`` when using a range.
+            range_value: Two-value range, or ``None`` when using a fixed count.
+            fixed_name: Setting name used for the fixed count in error messages.
+            range_name: Setting name used for the range in error messages.
 
-        Returns
-        -------
-        tuple[str, int | None, tuple[int, int] | None]
-            Design label and validated count settings.
+        Returns:
+            tuple[str, int | None, tuple[int, int] | None]: Design label and validated count settings.
         """
 
         if fixed_value is not None and range_value is not None:
@@ -918,10 +833,8 @@ class HierarchicalWorkflow:
     def _resolve_max_subjects(self) -> int:
         """Return the padded subject-row count for simulated datasets.
 
-        Returns
-        -------
-        int
-            Fixed subject count or the largest possible flexible subject count.
+        Returns:
+            int: Fixed subject count or the largest possible flexible subject count.
         """
 
         if self.subject_design == "fixed":
@@ -931,10 +844,8 @@ class HierarchicalWorkflow:
     def _resolve_max_trials(self) -> int:
         """Return the padded trial count for nested trial observations.
 
-        Returns
-        -------
-        int
-            Fixed trial count or the largest possible flexible trial count.
+        Returns:
+            int: Fixed trial count or the largest possible flexible trial count.
         """
 
         if self.trial_design == "fixed":
@@ -950,21 +861,18 @@ class HierarchicalWorkflow:
     ) -> int:
         """Draw one fixed or flexible count.
 
-        Parameters
-        ----------
-        design
-            Either ``"fixed"`` or ``"flex"``.
-        fixed_value
-            Fixed count used when ``design`` is ``"fixed"``.
-        range_value
-            Range used when ``design`` is ``"flex"``.
-        rng
-            NumPy-compatible random module or generator.
+        Args:
+            design:
+                Either ``"fixed"`` or ``"flex"``.
+            fixed_value:
+                Fixed count used when ``design`` is ``"fixed"``.
+            range_value:
+                Range used when ``design`` is ``"flex"``.
+            rng:
+                NumPy-compatible random module or generator.
 
-        Returns
-        -------
-        int
-            Fixed or sampled count.
+        Returns:
+            int: Fixed or sampled count.
         """
 
         if design == "fixed":
@@ -975,10 +883,8 @@ class HierarchicalWorkflow:
     def _feature_width(self) -> int:
         """Return the final subject-row feature width.
 
-        Returns
-        -------
-        int
-            Base simulator width plus optional design columns.
+        Returns:
+            int: Base simulator width plus optional design columns.
         """
 
         width = self._encoded_data_width()
@@ -991,11 +897,9 @@ class HierarchicalWorkflow:
     def _trial_feature_width(self) -> int:
         """Return the feature width for one nested trial row.
 
-        Returns
-        -------
-        int
-            Base trial-feature count plus an active-trial mask for flexible
-            trial designs.
+        Returns:
+            int: Base trial-feature count plus an active-trial mask for flexible
+                trial designs.
         """
 
         width = self.data_width
@@ -1006,10 +910,8 @@ class HierarchicalWorkflow:
     def _encoded_data_width(self) -> int:
         """Return the row width after observation-level encoding.
 
-        Returns
-        -------
-        int
-            Base simulator width or ``input_format`` output width.
+        Returns:
+            int: Base simulator width or ``input_format`` output width.
         """
 
         if self.input_format is None:
@@ -1019,15 +921,12 @@ class HierarchicalWorkflow:
     def _format_trial_feature(self, n_trials: int) -> float:
         """Return the trial-count feature for one subject row.
 
-        Parameters
-        ----------
-        n_trials
-            Number of responses for the subject.
+        Args:
+            n_trials:
+                Number of responses for the subject.
 
-        Returns
-        -------
-        float
-            Raw or scaled trial count depending on workflow settings.
+        Returns:
+            float: Raw or scaled trial count depending on workflow settings.
         """
 
         if self.trial_feature_scale is None:
@@ -1037,15 +936,12 @@ class HierarchicalWorkflow:
     def _simulate_dataset(self, **group_params) -> dict[str, np.ndarray]:
         """Simulate one group-level dataset.
 
-        Parameters
-        ----------
-        **group_params
-            Group-level parameter dictionary from ``draw_group_prior``.
+        Args:
+                **group_params
+                Group-level parameter dictionary from ``draw_group_prior``.
 
-        Returns
-        -------
-        dict[str, numpy.ndarray]
-            Data array and flexible-design metadata.
+        Returns:
+            dict[str, numpy.ndarray]: Data array and flexible-design metadata.
         """
 
         if self.observation == "trial":
@@ -1055,15 +951,12 @@ class HierarchicalWorkflow:
     def _simulate_aggregate_dataset(self, **group_params) -> dict[str, np.ndarray]:
         """Simulate one aggregate group-level dataset.
 
-        Parameters
-        ----------
-        **group_params
-            Group-level parameter dictionary from ``draw_group_prior``.
+        Args:
+                **group_params
+                Group-level parameter dictionary from ``draw_group_prior``.
 
-        Returns
-        -------
-        dict[str, numpy.ndarray]
-            Subject-by-feature data array and flexible-design metadata.
+        Returns:
+            dict[str, numpy.ndarray]: Subject-by-feature data array and flexible-design metadata.
         """
 
         n_subjects = self._draw_count(
@@ -1149,16 +1042,13 @@ class HierarchicalWorkflow:
     def _simulate_trial_dataset(self, **group_params) -> dict[str, np.ndarray]:
         """Simulate one nested subject-by-trial group-level dataset.
 
-        Parameters
-        ----------
-        **group_params
-            Group-level parameter dictionary from ``draw_group_prior``.
+        Args:
+                **group_params
+                Group-level parameter dictionary from ``draw_group_prior``.
 
-        Returns
-        -------
-        dict[str, numpy.ndarray]
-            Trial-level data with shape ``subjects x trials x features`` plus
-            flexible-design metadata.
+        Returns:
+            dict[str, numpy.ndarray]: Trial-level data with shape ``subjects x trials x features`` plus
+                flexible-design metadata.
         """
 
         n_subjects = self._draw_count(
@@ -1218,10 +1108,8 @@ class HierarchicalWorkflow:
     def _random_group_condition_keys(self) -> list[str]:
         """Return group parameters used to condition random-effect sampling.
 
-        Returns
-        -------
-        list[str]
-            Raw group mean and log-sigma keys for each hierarchical parameter.
+        Returns:
+            list[str]: Raw group mean and log-sigma keys for each hierarchical parameter.
         """
 
         from bami.inference.priors import log_sigma_key, mu_raw_key
@@ -1237,15 +1125,12 @@ class HierarchicalWorkflow:
     def _random_z_key(self, param_name: str) -> str:
         """Return the standardized random-effect key for one parameter.
 
-        Parameters
-        ----------
-        param_name
-            Public parameter name from the hierarchical prior.
+        Args:
+            param_name:
+                Public parameter name from the hierarchical prior.
 
-        Returns
-        -------
-        str
-            Key used for the standard-normal subject deviation.
+        Returns:
+            str: Key used for the standard-normal subject deviation.
         """
 
         return f"{param_name}_z"
@@ -1253,11 +1138,9 @@ class HierarchicalWorkflow:
     def _random_inference_variables(self) -> list[str]:
         """Return standardized variables inferred by the random workflow.
 
-        Returns
-        -------
-        list[str]
-            Standardized subject-deviation keys, one for each hierarchical
-            parameter.
+        Returns:
+            list[str]: Standardized subject-deviation keys, one for each hierarchical
+                parameter.
         """
 
         return [
@@ -1269,16 +1152,13 @@ class HierarchicalWorkflow:
     def _draw_random_subject_prior(self, rng=np.random) -> dict[str, float]:
         """Draw one group and one subject for random-effect training.
 
-        Parameters
-        ----------
-        rng
-            NumPy-compatible random generator.
+        Args:
+            rng:
+                NumPy-compatible random generator.
 
-        Returns
-        -------
-        dict[str, float]
-            Group raw parameters, standardized deviations, and public subject
-            parameters for simulator calls.
+        Returns:
+            dict[str, float]: Group raw parameters, standardized deviations, and public subject
+                parameters for simulator calls.
         """
 
         from bami.inference.priors import apply_link, log_sigma_key, mu_raw_key
@@ -1300,11 +1180,9 @@ class HierarchicalWorkflow:
     def _random_aggregate_feature_width(self) -> int:
         """Return aggregate feature width for one random-effect subject.
 
-        Returns
-        -------
-        int
-            Encoded subject-row width without the parent workflow's
-            active-subject mask.
+        Returns:
+            int: Encoded subject-row width without the parent workflow's
+                active-subject mask.
         """
 
         width = self._encoded_data_width()
@@ -1315,16 +1193,13 @@ class HierarchicalWorkflow:
     def _simulate_random_subject(self, **params) -> dict[str, np.ndarray]:
         """Simulate one subject for the random-effect workflow.
 
-        Parameters
-        ----------
-        **params
-            Group raw parameters, subject raw parameters, public subject
-            parameters, and scalar constants from the random prior draw.
+        Args:
+                **params
+                Group raw parameters, subject raw parameters, public subject
+                parameters, and scalar constants from the random prior draw.
 
-        Returns
-        -------
-        dict[str, numpy.ndarray]
-            Single-subject data formatted for BayesFlow.
+        Returns:
+            dict[str, numpy.ndarray]: Single-subject data formatted for BayesFlow.
         """
 
         if self.observation == "trial":
@@ -1334,15 +1209,12 @@ class HierarchicalWorkflow:
     def _simulate_random_aggregate_subject(self, **params) -> dict[str, np.ndarray]:
         """Simulate one aggregate subject for random-effect training.
 
-        Parameters
-        ----------
-        **params
-            Public subject parameters and scalar constants for the simulator.
+        Args:
+                **params
+                Public subject parameters and scalar constants for the simulator.
 
-        Returns
-        -------
-        dict[str, numpy.ndarray]
-            Data array with shape ``(1, random_feature_width)``.
+        Returns:
+            dict[str, numpy.ndarray]: Data array with shape ``(1, random_feature_width)``.
         """
 
         subject_params = self._public_subject_params(params)
@@ -1387,15 +1259,12 @@ class HierarchicalWorkflow:
     def _simulate_random_trial_subject(self, **params) -> dict[str, np.ndarray]:
         """Simulate one trial-level subject for random-effect training.
 
-        Parameters
-        ----------
-        **params
-            Public subject parameters and scalar constants for the simulator.
+        Args:
+                **params
+                Public subject parameters and scalar constants for the simulator.
 
-        Returns
-        -------
-        dict[str, numpy.ndarray]
-            Trial data with shape ``(max_trials, trial_feature_width)``.
+        Returns:
+            dict[str, numpy.ndarray]: Trial data with shape ``(max_trials, trial_feature_width)``.
         """
 
         subject_params = self._public_subject_params(params)
@@ -1433,16 +1302,13 @@ class HierarchicalWorkflow:
     def _public_subject_params(self, params: Mapping) -> dict[str, float]:
         """Return simulator parameters from a random-effect prior draw.
 
-        Parameters
-        ----------
-        params
-            Prior draw containing public subject parameters, scalar constants,
-            and raw inference variables.
+        Args:
+            params:
+                Prior draw containing public subject parameters, scalar constants,
+                and raw inference variables.
 
-        Returns
-        -------
-        dict[str, float]
-            Public parameters suitable for ``simulator(**params)``.
+        Returns:
+            dict[str, float]: Public parameters suitable for ``simulator(**params)``.
         """
 
         out = {}
@@ -1454,10 +1320,12 @@ class HierarchicalWorkflow:
     def _build_random_workflow(self) -> None:
         """Build the BayesFlow workflow for subject-level random effects.
 
-        Returns
-        -------
-        None
-            Sets ``random_workflow`` on this object.
+        The random stage conditions subject-level z effects on both subject data
+        and group-level raw parameters. Standardizing all three BayesFlow input
+        groups keeps their scales comparable during random-effect inference.
+
+        Returns:
+            None: Sets ``random_workflow`` on this object.
         """
 
         def _draw_random_prior():
@@ -1487,6 +1355,11 @@ class HierarchicalWorkflow:
             inference_variables=self._random_inference_variables(),
             inference_conditions=self._random_group_condition_keys(),
             summary_variables=["data"],
+            standardize=[
+                "inference_variables",
+                "summary_variables",
+                "inference_conditions",
+            ],
         )
         self.random_workflow.transform_posterior_samples = self.convert_random_posterior
         self.random_workflow.workflow_level = "random"
@@ -1500,11 +1373,9 @@ class HierarchicalWorkflow:
     def _build_workflow(self) -> None:
         """Build the simulator, networks, and BayesFlow workflow.
 
-        Returns
-        -------
-        None
-            Sets ``simulator``, ``summary_network``, ``inference_network``, and
-            ``workflow`` on this object.
+        Returns:
+            None: Sets ``simulator``, ``summary_network``, ``inference_network``, and
+                ``workflow`` on this object.
         """
 
         def _draw_group_prior():
@@ -1546,11 +1417,9 @@ class HierarchicalWorkflow:
     def _workflow_obs_names(self) -> list[str]:
         """Return feature names exposed on the BayesFlow workflow.
 
-        Returns
-        -------
-        list[str]
-            Base observation names, plus the active-trial mask for flexible
-            nested trial data.
+        Returns:
+            list[str]: Base observation names, plus the active-trial mask for flexible
+                nested trial data.
         """
 
         names = list(self.obs_names)
@@ -1561,11 +1430,9 @@ class HierarchicalWorkflow:
     def _build_summary_network(self):
         """Build the BayesFlow summary network for this observation contract.
 
-        Returns
-        -------
-        object
-            One DeepSet for aggregate subject rows, or a mask-aware nested
-            summary network for subject-by-trial rows.
+        Returns:
+            object: One DeepSet for aggregate subject rows, or a mask-aware nested
+                summary network for subject-by-trial rows.
         """
 
         if self.observation == "aggregate":
@@ -1581,16 +1448,12 @@ class HierarchicalWorkflow:
     def convert_posterior(self, samples: dict) -> dict:
         """Transform posterior samples when a transform function is supplied.
 
-        Parameters
-        ----------
-        samples
-            Raw posterior sample dictionary from BayesFlow.
+        Args:
+            samples: Raw posterior sample dictionary from BayesFlow.
 
-        Returns
-        -------
-        dict
-            Transformed posterior samples, or the original samples when no
-            transform was supplied.
+        Returns:
+            dict: Transformed posterior samples, or the original samples when
+                no transform was supplied.
         """
 
         if self._transform_samples is None:
@@ -1600,16 +1463,12 @@ class HierarchicalWorkflow:
     def convert_random_posterior(self, samples: dict) -> dict:
         """Return random-workflow samples without changing the ``z`` scale.
 
-        Parameters
-        ----------
-        samples
-            Posterior sample dictionary from the random workflow.
+        Args:
+            samples: Posterior sample dictionary from the random workflow.
 
-        Returns
-        -------
-        dict
-            Copy of ``samples``. Public subject parameters are created later
-            because they require paired group posterior draws.
+        Returns:
+            dict: Copy of ``samples``. Public subject parameters are created
+                later because they require paired group posterior draws.
         """
 
         return dict(samples)
@@ -1617,18 +1476,13 @@ class HierarchicalWorkflow:
     def simulate(self, n_datasets: int) -> Mapping[str, np.ndarray]:
         """Simulate datasets from this hierarchical workflow.
 
-        Parameters
-        ----------
-        n_datasets
-            Number of group-level datasets to draw from the workflow prior and
-            simulator.
+        Args:
+            n_datasets: Number of group-level datasets to draw from the
+                workflow prior and simulator.
 
-        Returns
-        -------
-        Mapping[str, numpy.ndarray]
-            Simulated group data, group parameter truth arrays, and any saved
-            subject-level truth arrays using the workflow's data-shape
-            contract.
+        Returns:
+            Mapping[str, numpy.ndarray]: Simulated group data, group
+                parameter truth arrays, and any saved subject-level truth arrays.
         """
 
         return self.workflow.simulate(n_datasets)
@@ -1642,27 +1496,22 @@ class HierarchicalWorkflow:
     ) -> Mapping[str, np.ndarray]:
         """Draw group-level posterior samples for this hierarchy.
 
-        Parameters
-        ----------
-        test_data
-            Observed or simulated hierarchy data dictionary passed to the
-            trained BayesFlow workflow. In examples this is often created with
-            ``model.simulate(n_datasets)``.
-        num_samples
-            Number of group-level posterior draws to request for each dataset.
-        approximator_kwargs
-            Optional keyword arguments forwarded to BayesFlow's
-            ``workflow.sample`` method.
-        sample_batch_size
-            Optional number of datasets to sample at once. Use this when many
-            datasets would otherwise exceed accelerator memory.
+        Args:
+            test_data: Observed or simulated hierarchy data dictionary passed
+                to the trained BayesFlow workflow. Often created with
+                ``model.simulate(n_datasets)``.
+            num_samples: Number of group-level posterior draws to request for
+                each dataset.
+            approximator_kwargs: Optional keyword arguments forwarded to
+                BayesFlow's ``workflow.sample`` method.
+            sample_batch_size: Optional number of datasets to sample at once.
+                Use this when many datasets would otherwise exceed accelerator
+                memory.
 
-        Returns
-        -------
-        Mapping[str, numpy.ndarray]
-            Group-level posterior draws. When this workflow defines a posterior
-            transform, returned values use researcher-facing parameter names
-            and scales.
+        Returns:
+            Mapping[str, numpy.ndarray]: Group-level posterior draws. When a
+                posterior transform exists, values use researcher-facing names and
+                scales.
         """
 
         from bami.workflows._sampling import _sample_posterior
@@ -1682,6 +1531,7 @@ class HierarchicalWorkflow:
         params: str | Sequence[str] | None = None,
         metrics: str | Sequence[str] = "corr",
         n_cols: int = 3,
+        sample_batch_size: int = 100,
     ):
         """Plot group-level parameter recovery for this hierarchy.
 
@@ -1690,26 +1540,23 @@ class HierarchicalWorkflow:
         posterior means. It is intended for diagnosing one fitted hierarchical
         model, not for comparing multiple models.
 
-        Parameters
-        ----------
-        n_datasets
-            Number of simulated group datasets used for the diagnostic plot.
-        num_samples
-            Number of group posterior draws per simulated dataset.
-        params
-            Optional population parameter key or keys to plot, such as
-            ``"c_mu"`` or ``"c_sigma"``. By default all available public group
-            keys are shown.
-        metrics
-            Metric name or names shown in each panel title. Supported values
-            are ``corr``, ``ccc``, and ``rmse``.
-        n_cols
-            Maximum number of columns in the plot grid.
+        Args:
+            n_datasets: Number of simulated group datasets used for the
+                diagnostic plot.
+            num_samples: Number of group posterior draws per simulated
+                dataset.
+            params: Optional population parameter key or keys to plot, such
+                as ``"c_mu"`` or ``"c_sigma"``. By default all available public group
+                keys are shown.
+            metrics: Metric name or names shown in each panel title.
+                Supported values are ``corr``, ``ccc``, and ``rmse``.
+            n_cols: Maximum number of columns in the plot grid.
+            sample_batch_size: BayesFlow posterior sampling mini-batch size.
+                Larger values usually reduce sampling overhead; lower this
+                value if a diagnostic run exceeds available memory.
 
-        Returns
-        -------
-        matplotlib.figure.Figure
-            Population parameter recovery figure.
+        Returns:
+            matplotlib.figure.Figure: Population parameter recovery figure.
         """
 
         from bami.evaluation.diagnostics import plot_population_recovery
@@ -1721,6 +1568,7 @@ class HierarchicalWorkflow:
             params=params,
             metrics=metrics,
             n_cols=n_cols,
+            sample_batch_size=sample_batch_size,
         )
 
     def _group_sample_array(
@@ -1731,19 +1579,16 @@ class HierarchicalWorkflow:
     ) -> np.ndarray:
         """Return a validated group posterior sample array.
 
-        Parameters
-        ----------
-        group_samples
-            Posterior samples returned by ``sample_group_posterior``.
-        key
-            Required raw group parameter key.
-        n_datasets
-            Optional expected dataset count.
+        Args:
+            group_samples:
+                Posterior samples returned by ``sample_group_posterior``.
+            key:
+                Required raw group parameter key.
+            n_datasets:
+                Optional expected dataset count.
 
-        Returns
-        -------
-        numpy.ndarray
-            Array with shape ``(n_datasets, n_samples)``.
+        Returns:
+            numpy.ndarray: Array with shape ``(n_datasets, n_samples)``.
         """
 
         if key not in group_samples:
@@ -1771,17 +1616,14 @@ class HierarchicalWorkflow:
     def _fixed_group_condition_value(self, key: str) -> float | None:
         """Return a fixed group condition value from the prior.
 
-        Parameters
-        ----------
-        key
-            Raw group condition key such as ``theta_mu_raw`` or
-            ``theta_log_sigma``.
+        Args:
+            key:
+                Raw group condition key such as ``theta_mu_raw`` or
+                ``theta_log_sigma``.
 
-        Returns
-        -------
-        float or None
-            Fixed raw group value, or ``None`` when posterior samples are
-            required.
+        Returns:
+            float or None: Fixed raw group value, or ``None`` when posterior samples are
+                required.
         """
 
         from bami.inference.priors import is_distribution_value
@@ -1815,19 +1657,18 @@ class HierarchicalWorkflow:
     ) -> np.ndarray:
         """Return group conditions from posterior samples or fixed priors.
 
-        Parameters
-        ----------
-        group_samples
-            Posterior samples returned by ``sample_group_posterior``.
-        key
-            Raw group condition key.
-        n_datasets, n_samples
-            Expected output dimensions.
+        Args:
+            group_samples:
+                Posterior samples returned by ``sample_group_posterior``.
+            key:
+                Raw group condition key.
+            n_datasets:
+                Expected number of datasets.
+            n_samples:
+                Expected number of paired posterior draws.
 
-        Returns
-        -------
-        numpy.ndarray
-            Group condition array with shape ``(n_datasets, n_samples)``.
+        Returns:
+            numpy.ndarray: Group condition array with shape ``(n_datasets, n_samples)``.
         """
 
         if key in group_samples:
@@ -1846,15 +1687,12 @@ class HierarchicalWorkflow:
     ) -> tuple[int, int]:
         """Return dataset and sample counts from raw group posterior samples.
 
-        Parameters
-        ----------
-        group_samples
-            Posterior samples returned by ``sample_group_posterior``.
+        Args:
+            group_samples:
+                Posterior samples returned by ``sample_group_posterior``.
 
-        Returns
-        -------
-        tuple[int, int]
-            Number of datasets and paired posterior draws.
+        Returns:
+            tuple[int, int]: Number of datasets and paired posterior draws.
         """
 
         keys = self._random_group_condition_keys()
@@ -1873,16 +1711,13 @@ class HierarchicalWorkflow:
     ) -> tuple[np.ndarray, list[int]]:
         """Return observed subjects in a rectangular data array.
 
-        Parameters
-        ----------
-        observed_data
-            Observed subject data. Accepts a data dictionary or a raw data
-            array using the workflow's observation contract.
+        Args:
+            observed_data (Mapping | numpy.ndarray | Sequence):
+                Observed subject data. Accepts a data dictionary or a raw data
+                array using the workflow's observation contract.
 
-        Returns
-        -------
-        tuple[numpy.ndarray, list[int]]
-            Data array and active subject counts per dataset.
+        Returns:
+            tuple[numpy.ndarray, list[int]]: Data array and active subject counts per dataset.
         """
 
         if self.observation == "trial":
@@ -1894,16 +1729,13 @@ class HierarchicalWorkflow:
     ) -> tuple[np.ndarray, list[int]]:
         """Return aggregate observed subjects for random-effect sampling.
 
-        Parameters
-        ----------
-        observed_data
-            Mapping with ``data`` or an aggregate data array.
+        Args:
+            observed_data (Mapping | numpy.ndarray | Sequence):
+                Mapping with ``data`` or an aggregate data array.
 
-        Returns
-        -------
-        tuple[numpy.ndarray, list[int]]
-            Data with shape ``(datasets, subjects, random_feature_width)`` and
-            active subject counts.
+        Returns:
+            tuple[numpy.ndarray, list[int]]: Data with shape ``(datasets, subjects, random_feature_width)`` and
+                active subject counts.
         """
 
         raw = (
@@ -1947,16 +1779,13 @@ class HierarchicalWorkflow:
     ) -> tuple[np.ndarray, list[int]]:
         """Return trial-level observed subjects for random-effect sampling.
 
-        Parameters
-        ----------
-        observed_data
-            Mapping with ``data`` or a trial-level data array.
+        Args:
+            observed_data (Mapping | numpy.ndarray | Sequence):
+                Mapping with ``data`` or a trial-level data array.
 
-        Returns
-        -------
-        tuple[numpy.ndarray, list[int]]
-            Data with shape ``(datasets, subjects, trials, features)`` and
-            active subject counts.
+        Returns:
+            tuple[numpy.ndarray, list[int]]: Data with shape ``(datasets, subjects, trials, features)`` and
+                active subject counts.
         """
 
         raw = (
@@ -1975,18 +1804,15 @@ class HierarchicalWorkflow:
     ) -> tuple[np.ndarray, list[int]]:
         """Return fixed-trial data and warn when trial counts differ.
 
-        Parameters
-        ----------
-        observed_data
-            Original user input, used only to preserve subject-count handling.
-        raw
-            Trial data array with fixed trial rows.
+        Args:
+            observed_data (Mapping | numpy.ndarray | Sequence):
+                Original user input, used only to preserve subject-count handling.
+            raw:
+                Trial data array with fixed trial rows.
 
-        Returns
-        -------
-        tuple[numpy.ndarray, list[int]]
-            Data with shape ``(datasets, subjects, trials, features)`` and
-            active subject counts.
+        Returns:
+            tuple[numpy.ndarray, list[int]]: Data with shape ``(datasets, subjects, trials, features)`` and
+                active subject counts.
         """
 
         arr = np.asarray(raw, dtype=np.float32)
@@ -2024,17 +1850,14 @@ class HierarchicalWorkflow:
     def _normalize_random_flex_trial_data(self, raw) -> tuple[np.ndarray, list[int]]:
         """Return flex-trial data with automatic padding and trial masks.
 
-        Parameters
-        ----------
-        raw
-            Trial data supplied by the user. It may already contain the
-            ``active_trial`` mask or may contain raw variable-length trial rows.
+        Args:
+            raw:
+                Trial data supplied by the user. It may already contain the
+                ``active_trial`` mask or may contain raw variable-length trial rows.
 
-        Returns
-        -------
-        tuple[numpy.ndarray, list[int]]
-            Padded data with shape ``(datasets, subjects, max_trials,
-            data_width + 1)`` and active subject counts.
+        Returns:
+            tuple[numpy.ndarray, list[int]]: Padded data with shape ``(datasets, subjects, max_trials,
+                data_width + 1)`` and active subject counts.
         """
 
         arr = self._try_rectangular_trial_array(raw)
@@ -2051,16 +1874,13 @@ class HierarchicalWorkflow:
     def _try_rectangular_trial_array(raw) -> np.ndarray | None:
         """Return ``raw`` as a float array when it is rectangular.
 
-        Parameters
-        ----------
-        raw
-            User-supplied trial data.
+        Args:
+            raw:
+                User-supplied trial data.
 
-        Returns
-        -------
-        numpy.ndarray or None
-            Rectangular array, or ``None`` when ragged subject lengths prevent
-            direct conversion.
+        Returns:
+            numpy.ndarray or None: Rectangular array, or ``None`` when ragged subject lengths prevent
+                direct conversion.
         """
 
         try:
@@ -2072,15 +1892,12 @@ class HierarchicalWorkflow:
     def _ensure_random_trial_axes(arr: np.ndarray) -> np.ndarray:
         """Ensure trial data has dataset and subject axes.
 
-        Parameters
-        ----------
-        arr
-            Trial data shaped as one subject, one dataset, or many datasets.
+        Args:
+            arr:
+                Trial data shaped as one subject, one dataset, or many datasets.
 
-        Returns
-        -------
-        numpy.ndarray
-            Data with shape ``(datasets, subjects, trials, features)``.
+        Returns:
+            numpy.ndarray: Data with shape ``(datasets, subjects, trials, features)``.
         """
 
         if arr.ndim == 2:
@@ -2098,15 +1915,12 @@ class HierarchicalWorkflow:
     def _validate_flex_trial_mask(self, arr: np.ndarray) -> None:
         """Validate a pre-padded flexible trial array.
 
-        Parameters
-        ----------
-        arr
-            Data with a final ``active_trial`` mask column.
+        Args:
+            arr:
+                Data with a final ``active_trial`` mask column.
 
-        Returns
-        -------
-        None
-            Raises an error when the shape or mask is incompatible.
+        Returns:
+            None: Raises an error when the shape or mask is incompatible.
         """
 
         if arr.shape[-2] != self.max_trials:
@@ -2124,16 +1938,13 @@ class HierarchicalWorkflow:
     ) -> tuple[np.ndarray, list[int]]:
         """Pad rectangular raw flexible trial data and append a mask.
 
-        Parameters
-        ----------
-        arr
-            Raw trial data with shape ``(datasets, subjects, trials,
-            data_width)``.
+        Args:
+            arr:
+                Raw trial data with shape ``(datasets, subjects, trials,
+                data_width)``.
 
-        Returns
-        -------
-        tuple[numpy.ndarray, list[int]]
-            Padded masked data and active subject counts.
+        Returns:
+            tuple[numpy.ndarray, list[int]]: Padded masked data and active subject counts.
         """
 
         if arr.shape[-2] > self.max_trials:
@@ -2156,16 +1967,13 @@ class HierarchicalWorkflow:
     ) -> tuple[np.ndarray, list[int]]:
         """Pad ragged flexible trial data and append active-trial masks.
 
-        Parameters
-        ----------
-        raw
-            A list of subject arrays, or a list of datasets where each dataset
-            is a list of subject arrays.
+        Args:
+            raw:
+                A list of subject arrays, or a list of datasets where each dataset
+                is a list of subject arrays.
 
-        Returns
-        -------
-        tuple[numpy.ndarray, list[int]]
-            Padded masked data and active subject counts.
+        Returns:
+            tuple[numpy.ndarray, list[int]]: Padded masked data and active subject counts.
         """
 
         datasets = self._as_trial_datasets(raw)
@@ -2207,15 +2015,12 @@ class HierarchicalWorkflow:
     def _as_trial_datasets(raw) -> list[list]:
         """Return ragged trial input as ``datasets -> subjects``.
 
-        Parameters
-        ----------
-        raw
-            Ragged trial data supplied by the user.
+        Args:
+            raw:
+                Ragged trial data supplied by the user.
 
-        Returns
-        -------
-        list[list]
-            Nested datasets, each containing subject trial arrays.
+        Returns:
+            list[list]: Nested datasets, each containing subject trial arrays.
         """
 
         if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes)):
@@ -2236,19 +2041,16 @@ class HierarchicalWorkflow:
     ) -> list[int]:
         """Return active subject counts for observed random-effect data.
 
-        Parameters
-        ----------
-        observed_data
-            Original observed data input.
-        arr
-            Normalized data array with dataset and subject axes.
-        has_subject_mask
-            Whether the final aggregate feature is an active-subject mask.
+        Args:
+            observed_data (Mapping | numpy.ndarray | Sequence):
+                Original observed data input.
+            arr:
+                Normalized data array with dataset and subject axes.
+            has_subject_mask:
+                Whether the final aggregate feature is an active-subject mask.
 
-        Returns
-        -------
-        list[int]
-            Active subject count for each dataset.
+        Returns:
+            list[int]: Active subject count for each dataset.
         """
 
         n_datasets = arr.shape[0]
@@ -2278,101 +2080,47 @@ class HierarchicalWorkflow:
     ) -> Mapping[str, np.ndarray]:
         """Draw subject-level random-effect posterior samples.
 
-        Parameters
-        ----------
-        observed_data
-            One or more observed subjects using this workflow's observation
-            contract. A full group data dictionary from ``model.simulate`` is
-            also accepted. For trial observations, fixed-trial models warn
-            when the observed trial count differs from the model's ``n_trials``.
-            Flexible-trial models infer the required padding and
-            ``active_trial`` mask from ``n_trials_range`` when raw
-            variable-length subject trial arrays are supplied.
-        group_samples
-            Group posterior samples from ``model.sample_group_posterior``. Raw
-            group keys such as ``theta_mu_raw`` and ``theta_log_sigma`` are
-            required because they define the shrinkage transform.
-        approximator_kwargs
-            Optional keyword arguments forwarded to the random workflow's
-            ``sample`` method.
-        sample_batch_size
-            Optional number of subject/draw condition rows to sample at once.
-            Larger values can be faster but use more memory.
+        Use this after ``sample_group_posterior`` when you want posterior draws
+        for each subject's random effects under paired group-level uncertainty.
 
-        Returns
-        -------
-        Mapping[str, numpy.ndarray]
-            Subject posterior samples with shape
-            ``(n_datasets, n_samples, n_subjects)`` for public parameter keys,
-            raw subject keys, and standardized ``z`` keys.
+        Args:
+            observed_data (Mapping | numpy.ndarray | Sequence): One or more observed subjects using this
+                workflow's observation contract. A full group data dictionary from
+                ``model.simulate`` is also accepted.
+            group_samples: Group posterior samples from
+                ``model.sample_group_posterior``. Raw group keys such as
+                ``theta_mu_raw`` and ``theta_log_sigma`` are required because they
+                define the shrinkage transform.
+            approximator_kwargs: Optional keyword arguments forwarded to the
+                random workflow's ``ancestral_sample`` method.
+            sample_batch_size: Optional BayesFlow sampling batch size. Larger
+                values can be faster but use more memory.
+
+        Returns:
+            Mapping[str, numpy.ndarray]: Subject posterior samples with shape
+                ``(n_datasets, n_samples, n_subjects)`` for public parameter keys,
+                raw subject keys, and standardized ``z`` keys.
         """
 
-        if self.random_workflow is None:
-            raise ValueError("Call train_random_workflow(...) before sampling.")
-        observed_arr, active_counts = self._normalize_random_observed_data(
-            observed_data
-        )
-        n_datasets, n_subject_slots = observed_arr.shape[:2]
-        group_n_datasets, n_samples = self._group_sample_shape(group_samples)
-        if group_n_datasets != n_datasets:
-            raise ValueError(
-                "observed_data and group_samples must have the same dataset count."
-            )
-        group_arrays = {
-            key: self._group_condition_array(
-                group_samples,
-                key,
-                n_datasets,
-                n_samples,
-            )
-            for key in self._random_group_condition_keys()
-        }
+        from bami.workflows._sampling import _sample_random_posterior
 
-        condition_rows = []
-        row_index = []
-        group_conditions = {key: [] for key in self._random_group_condition_keys()}
-        for dataset_id in range(n_datasets):
-            for subject_id in range(active_counts[dataset_id]):
-                subject_data = observed_arr[dataset_id, subject_id]
-                for sample_id in range(n_samples):
-                    if self.observation == "aggregate":
-                        condition_rows.append(subject_data[np.newaxis, :])
-                    else:
-                        condition_rows.append(subject_data)
-                    row_index.append((dataset_id, sample_id, subject_id))
-                    for key in group_conditions:
-                        group_conditions[key].append(
-                            group_arrays[key][dataset_id, sample_id]
-                        )
-
-        conditions = {"data": np.asarray(condition_rows, dtype=np.float32)}
-        for key, values in group_conditions.items():
-            conditions[key] = np.asarray(values, dtype=np.float32)
-
-        sample_kwargs = dict(approximator_kwargs or {})
-        if sample_batch_size is not None:
-            sample_kwargs["batch_size"] = int(sample_batch_size)
-        z_samples = self.random_workflow.sample(
-            num_samples=1,
-            conditions=conditions,
-            **sample_kwargs,
-        )
-        return self._format_random_samples(
-            z_samples=z_samples,
-            group_arrays=group_arrays,
-            row_index=row_index,
-            n_datasets=n_datasets,
-            n_samples=n_samples,
-            n_subjects=n_subject_slots,
+        return _sample_random_posterior(
+            model=self,
+            observed_data=observed_data,
+            group_samples=group_samples,
+            approximator_kwargs=approximator_kwargs,
+            sample_batch_size=sample_batch_size,
         )
 
     def plot_random_recovery(
         self,
         n_datasets: int,
-        num_samples: int,
+        num_samples: int = 100,
         params: str | Sequence[str] | None = None,
         metrics: str | Sequence[str] = "corr",
         n_cols: int = 3,
+        sample_batch_size: int = 100,
+        show_progress: bool = True,
     ):
         """Plot dataset-level random parameter recovery metrics.
 
@@ -2381,27 +2129,29 @@ class HierarchicalWorkflow:
         simulated dataset and parameter. It requires ``keep_subject_truth`` so
         the simulation contains subject-level true values.
 
-        Parameters
-        ----------
-        n_datasets
-            Number of simulated group datasets used for the diagnostic plot.
-        num_samples
-            Number of group posterior draws per simulated dataset. These draws
-            define the paired shrinkage conditions for random-effect sampling.
-        params
-            Optional subject-level parameter name or names to plot, such as
-            ``"c"`` or ``"kappa"``. By default all saved subject-truth
-            parameters with posterior samples are shown.
-        metrics
-            Metric name or names to plot. Supported values are ``corr``,
-            ``ccc``, and ``rmse``.
-        n_cols
-            Maximum number of columns in the metric panel grid.
+        Args:
+            n_datasets: Number of simulated group datasets used for the
+                diagnostic plot.
+            num_samples: Number of paired group and random posterior draws
+                per simulated dataset.
+            params: Optional subject-level parameter name or names to plot,
+                such as ``"c"`` or ``"kappa"``. By default all saved subject-truth
+                parameters with posterior samples are shown.
+            metrics: Metric name or names to plot. Supported values are
+                ``corr``, ``ccc``, and ``rmse``.
+            n_cols: Maximum number of columns in the metric panel grid.
+            sample_batch_size: BayesFlow posterior sampling mini-batch size
+                used for group and random posterior draws inside this
+                diagnostic. Larger values usually reduce sampling overhead;
+                lower this value if a diagnostic run exceeds available memory.
+                The diagnostic still simulates and scores one recovery dataset
+                at a time.
+            show_progress: Whether to print dataset-level progress while the
+                diagnostic runs.
 
-        Returns
-        -------
-        matplotlib.figure.Figure
-            Subject-level random parameter recovery figure.
+        Returns:
+            matplotlib.figure.Figure: Subject-level random parameter recovery
+                figure.
         """
 
         from bami.evaluation.diagnostics import plot_random_recovery
@@ -2413,76 +2163,19 @@ class HierarchicalWorkflow:
             params=params,
             metrics=metrics,
             n_cols=n_cols,
+            sample_batch_size=sample_batch_size,
+            show_progress=show_progress,
         )
-
-    def _format_random_samples(
-        self,
-        *,
-        z_samples: Mapping[str, np.ndarray],
-        group_arrays: Mapping[str, np.ndarray],
-        row_index: list[tuple[int, int, int]],
-        n_datasets: int,
-        n_samples: int,
-        n_subjects: int,
-    ) -> dict[str, np.ndarray]:
-        """Convert sampled ``z`` values into subject posterior samples.
-
-        Parameters
-        ----------
-        z_samples
-            Random workflow output for all subject/draw condition rows.
-        group_arrays
-            Raw group condition arrays used for paired conversion.
-        row_index
-            Mapping from flattened condition rows back to dataset, sample, and
-            subject positions.
-        n_datasets, n_samples, n_subjects
-            Output dimensions.
-
-        Returns
-        -------
-        dict[str, numpy.ndarray]
-            Public, raw, and standardized subject posterior arrays.
-        """
-
-        from bami.inference.priors import apply_link, log_sigma_key, mu_raw_key
-
-        out = {}
-        for param_name, spec in self.priors.items():
-            if not isinstance(spec, dict):
-                continue
-            z_key = self._random_z_key(param_name)
-            z_values = np.asarray(z_samples[z_key], dtype=np.float32).reshape(-1)
-            z_arr = np.full(
-                (n_datasets, n_samples, n_subjects),
-                np.nan,
-                dtype=np.float32,
-            )
-            for row_id, (dataset_id, sample_id, subject_id) in enumerate(row_index):
-                z_arr[dataset_id, sample_id, subject_id] = z_values[row_id]
-
-            mu = group_arrays[mu_raw_key(param_name)]
-            log_sigma = group_arrays[log_sigma_key(param_name)]
-            raw_arr = mu[:, :, np.newaxis] + np.exp(log_sigma[:, :, np.newaxis]) * z_arr
-            public_arr = apply_link(raw_arr, spec.get("link", "identity"))
-
-            out[z_key] = z_arr
-            out[f"{param_name}_subj_raw"] = raw_arr.astype(np.float32)
-            out[param_name] = np.asarray(public_arr, dtype=np.float32)
-        return out
 
     def _prepare_observed_counts(self, counts) -> tuple[np.ndarray, list]:
         """Convert subject count rows to padded hierarchy summary data.
 
-        Parameters
-        ----------
-        counts
-            Subject-by-feature array ending in ``data_width`` base features.
+        Args:
+            counts:
+                Subject-by-feature array ending in ``data_width`` base features.
 
-        Returns
-        -------
-        tuple[numpy.ndarray, list]
-            One-dataset BayesFlow data array and subject identifiers.
+        Returns:
+            tuple[numpy.ndarray, list]: One-dataset BayesFlow data array and subject identifiers.
         """
 
         arr = np.asarray(counts, dtype=np.float32)
@@ -2538,10 +2231,8 @@ class HierarchicalWorkflow:
     def _input_format_metadata(self) -> dict | None:
         """Return JSON-safe input-format metadata for this workflow.
 
-        Returns
-        -------
-        dict or None
-            Metadata from ``input_format`` when one is configured.
+        Returns:
+            dict or None: Metadata from ``input_format`` when one is configured.
         """
 
         if self.input_format is None:
@@ -2551,16 +2242,13 @@ class HierarchicalWorkflow:
     def _resolve_random_validation_data(self, validation_data: int | dict) -> dict:
         """Return validation data for random-workflow training.
 
-        Parameters
-        ----------
-        validation_data
-            Integer validation-set size or a pre-simulated random-workflow
-            validation dictionary.
+        Args:
+            validation_data:
+                Integer validation-set size or a pre-simulated random-workflow
+                validation dictionary.
 
-        Returns
-        -------
-        dict
-            BayesFlow validation data dictionary for ``random_workflow``.
+        Returns:
+            dict: BayesFlow validation data dictionary for ``random_workflow``.
         """
 
         if self.random_workflow is None:
@@ -2588,21 +2276,18 @@ class HierarchicalWorkflow:
     ) -> dict:
         """Return the effective training config for the random workflow.
 
-        Parameters
-        ----------
-        inherit_config
-            Whether to start from this model's saved group-workflow training
-            config.
-        overrides
-            Training config values that should replace inherited values.
-        fit_kwargs
-            Additional training options inherited from or shared with
-            ``train_workflow``.
+        Args:
+            inherit_config (bool):
+                Whether to start from this model's saved group-workflow training
+                config.
+            overrides:
+                Training config values that should replace inherited values.
+            fit_kwargs:
+                Additional training options inherited from or shared with
+                ``train_workflow``.
 
-        Returns
-        -------
-        dict
-            Effective random-workflow training config.
+        Returns:
+            dict: Effective random-workflow training config.
         """
 
         if inherit_config:
@@ -2640,27 +2325,29 @@ class HierarchicalWorkflow:
         file=None,
         overwrite=False,
         **kwargs,
-    ):
+    ) -> object | dict:
         """Train the subject-level random-effect workflow.
 
-        Parameters
-        ----------
-        inherit_config
-            Whether to inherit this model's saved ``train_workflow`` settings.
-        file
-            Optional saved workflow file for the random workflow. This is never
-            inherited from group-workflow training.
-        overwrite
-            Whether to refit and overwrite ``file`` when it already exists.
-        **kwargs
-            Optional training config overrides shared with ``train_workflow``
-            such as ``max_epochs``, ``n_batch``, and ``batch_size``.
+        This trains the second-stage workflow used by
+        ``sample_random_posterior``. It can inherit the group workflow's
+        training settings, but saved-file handling is separate so group and
+        random networks are not accidentally written to the same file.
 
-        Returns
-        -------
-        object or dict
-            BayesFlow training history, or ``{"loaded": True, "file": path}``
-            when an existing saved random workflow is reused.
+        Args:
+            inherit_config (bool): Whether to inherit this model's saved
+                ``train_workflow`` settings.
+            file (str | pathlib.Path | None): Optional saved workflow file for the random workflow. This
+                is never inherited from group-workflow training.
+            overwrite (bool): Whether to refit and overwrite ``file`` when it
+                already exists.
+            **kwargs (Any): Optional training config overrides shared with
+                ``train_workflow``, such as ``max_epochs``, ``n_batch``, and
+                ``batch_size``.
+
+        Returns:
+            object | dict: BayesFlow training history, or
+                ``{"loaded": True, "file": path}`` when an existing saved random
+                workflow is reused.
         """
 
         if self.random_workflow is None:
@@ -2716,42 +2403,37 @@ class HierarchicalWorkflow:
         file=None,
         overwrite=False,
         **kwargs,
-    ):
+    ) -> object | dict:
         """Train the workflow with optional saved-workflow handling.
 
-        Parameters
-        ----------
-        max_epochs, initial_epochs
-            Maximum and initial training epochs.
-        n_batch, batch_size
-            Online simulation batches per epoch and datasets per batch.
-        validation_data
-            Integer validation-set size or a pre-simulated validation dict.
-        patience, min_delta
-            Early-stopping controls based on validation loss.
-        workers
-            Number of Keras data-loading workers for online simulation batches.
-        max_queue_size
-            Maximum queue length for prefetched simulation batches.
-        torch_device
-            Torch default device to use during training, such as ``"mps"`` or
-            ``"cpu"``. Unavailable accelerators fall back to CPU.
-        verbose
-            Training log verbosity level passed to Keras.
-        file
-            Optional saved workflow file. When supplied, existing weights are
-            loaded by default and new weights are saved after fitting.
-        overwrite
-            Whether to refit and overwrite ``file`` when the saved workflow
-            file already exists.
-        **kwargs
-            Additional keyword arguments passed to ``workflow.fit_online``.
+        Args:
+            max_epochs: Maximum number of training epochs.
+            initial_epochs: Number of epochs in the first training block.
+            n_batch: Online simulation batches per epoch.
+            batch_size: Simulated datasets per online batch.
+            validation_data: Integer validation-set size or a pre-simulated
+                validation dictionary.
+            patience: Early-stopping patience based on validation loss.
+            min_delta: Minimum validation-loss improvement counted as
+                progress.
+            workers: Number of Keras data-loading workers for online
+                simulation batches.
+            max_queue_size: Maximum queue length for prefetched simulation
+                batches.
+            torch_device: Torch default device to use during training, such
+                as ``"mps"`` or ``"cpu"``. Unavailable accelerators fall back to CPU.
+            verbose: Training log verbosity level passed to Keras.
+            file (str | pathlib.Path | None): Optional saved workflow file. Existing weights are loaded
+                by default, and new weights are saved after fitting.
+            overwrite (bool): Whether to refit and overwrite ``file`` when the saved
+                workflow file already exists.
+            **kwargs (Any): Additional keyword arguments passed to
+                ``workflow.fit_online``.
 
-        Returns
-        -------
-        object or dict
-            BayesFlow training history, or ``{"loaded": True, "file": path}``
-            when an existing saved workflow file is reused.
+        Returns:
+            object | dict: BayesFlow training history, or
+                ``{"loaded": True, "file": path}`` when an existing saved workflow
+                file is reused.
         """
 
         return training.train_workflow(
@@ -2775,15 +2457,12 @@ class HierarchicalWorkflow:
     def _resolve_validation_data(self, validation_data: int | dict) -> dict:
         """Return validation data for training.
 
-        Parameters
-        ----------
-        validation_data
-            Integer validation-set size or a pre-simulated validation dict.
+        Args:
+            validation_data:
+                Integer validation-set size or a pre-simulated validation dict.
 
-        Returns
-        -------
-        dict
-            BayesFlow validation data dictionary.
+        Returns:
+            dict: BayesFlow validation data dictionary.
         """
 
         return SimpleWorkflow._resolve_validation_data(self, validation_data)
@@ -2792,15 +2471,12 @@ class HierarchicalWorkflow:
     def _check_name(name) -> str:
         """Validate a model name.
 
-        Parameters
-        ----------
-        name
-            Candidate model name.
+        Args:
+            name:
+                Candidate model name.
 
-        Returns
-        -------
-        str
-            Non-empty model name.
+        Returns:
+            str: Non-empty model name.
         """
 
         checked = str(name).strip()
@@ -2812,15 +2488,12 @@ class HierarchicalWorkflow:
     def _check_param_names(param_names) -> list[str]:
         """Validate group-level inference variable names.
 
-        Parameters
-        ----------
-        param_names
-            Candidate parameter-name sequence.
+        Args:
+            param_names:
+                Candidate parameter-name sequence.
 
-        Returns
-        -------
-        list[str]
-            Non-empty list of parameter names.
+        Returns:
+            list[str]: Non-empty list of parameter names.
         """
 
         if isinstance(param_names, str):
@@ -2834,15 +2507,12 @@ class HierarchicalWorkflow:
     def _check_priors(priors) -> Mapping:
         """Validate group prior metadata.
 
-        Parameters
-        ----------
-        priors
-            Prior specification used by optional transforms.
+        Args:
+            priors:
+                Prior specification used by optional transforms.
 
-        Returns
-        -------
-        Mapping
-            Validated prior mapping.
+        Returns:
+            Mapping: Validated prior mapping.
         """
 
         if not isinstance(priors, Mapping):
@@ -2853,17 +2523,14 @@ class HierarchicalWorkflow:
     def _check_callable(value, name: str) -> Callable:
         """Validate a callable simulator component.
 
-        Parameters
-        ----------
-        value
-            Candidate callable.
-        name
-            Field name used in error messages.
+        Args:
+            value:
+                Candidate callable.
+            name:
+                Field name used in error messages.
 
-        Returns
-        -------
-        Callable
-            The original callable.
+        Returns:
+            Callable: The original callable.
         """
 
         if not callable(value):

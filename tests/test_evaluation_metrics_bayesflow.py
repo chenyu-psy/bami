@@ -79,6 +79,7 @@ class DummyRandomWorkflow:
     def __init__(self):
         self.last_sample_kwargs = None
         self.last_conditions = None
+        self.last_ancestral_conditions = None
 
     def sample(self, *, num_samples: int, conditions, **kwargs):
         """Return deterministic z draws for paired random-effect tests."""
@@ -86,6 +87,37 @@ class DummyRandomWorkflow:
         self.last_sample_kwargs = {"num_samples": num_samples, **kwargs}
         self.last_conditions = conditions
         return {"theta_z": conditions["theta_mu_raw"] + conditions["data"][:, 0, 0]}
+
+    def ancestral_sample(self, *, conditions, ancestral_conditions, **kwargs):
+        """Return deterministic z draws for BayesFlow ancestral tests.
+
+        Parameters
+        ----------
+        conditions
+            Child subject data passed to BayesFlow. Aggregate data has shape
+            ``datasets x subjects x 1 x features``; trial data has shape
+            ``datasets x subjects x trials x features``.
+        ancestral_conditions
+            Group posterior draw arrays with shape ``datasets x draws x 1``.
+        **kwargs
+            Sampling keyword arguments recorded for assertions.
+
+        Returns
+        -------
+        dict
+            Standardized random-effect samples shaped
+            ``datasets x subjects x draws``.
+        """
+
+        self.last_sample_kwargs = dict(kwargs)
+        self.last_conditions = conditions
+        self.last_ancestral_conditions = ancestral_conditions
+        first_observed_value = conditions["data"][:, :, 0, 0]
+        group_mu = ancestral_conditions["theta_mu_raw"][..., 0]
+        return {
+            "theta_z": first_observed_value[:, :, np.newaxis]
+            + group_mu[:, np.newaxis, :]
+        }
 
 
 class DummyTrainWorkflow:
@@ -201,7 +233,7 @@ def test_simple_workflow_plot_parameter_recovery_returns_figure():
         """Return posterior draws with axis 1 as the sample dimension."""
 
         assert kwargs["num_samples"] == 2
-        assert kwargs["sample_batch_size"] == 16
+        assert kwargs["sample_batch_size"] == 100
         theta = np.array([[0.0, 0.2], [1.0, 1.2], [2.0, 2.2]])
         scale = np.array([[1.1, 1.3], [2.1, 2.3], [3.1, 3.3]])
         return {"theta": theta, "scale": scale}
@@ -279,7 +311,14 @@ def test_hierarchical_workflow_plot_population_recovery_limits_params():
         "scale_mu": np.array([[1.0, 1.2], [2.0, 2.2], [3.0, 3.2]]),
     }
     model.simulate = lambda n_datasets: simulated
-    model.sample_group_posterior = lambda **kwargs: samples
+
+    def fake_sample_group_posterior(**kwargs):
+        """Return group samples and check the diagnostic sampling batch size."""
+
+        assert kwargs["sample_batch_size"] == 100
+        return samples
+
+    model.sample_group_posterior = fake_sample_group_posterior
 
     fig = model.plot_population_recovery(
         n_datasets=3,
@@ -352,15 +391,128 @@ def test_hierarchical_workflow_plot_random_recovery_ignores_padded_truth():
             ]
         )
     }
-    model.simulate = lambda n_datasets: simulated
-    model.sample_group_posterior = lambda **kwargs: {"theta_mu_raw": np.zeros((2, 2))}
-    model.sample_random_posterior = lambda **kwargs: random_samples
+    call_id = {"value": 0}
 
-    fig = model.plot_random_recovery(n_datasets=2, num_samples=2)
+    def fake_simulate(n_datasets):
+        """Return the next one-dataset simulated recovery batch."""
+
+        idx = call_id["value"]
+        call_id["value"] += n_datasets
+        return {
+            "theta_subj": simulated["theta_subj"][idx : idx + n_datasets],
+            "data": simulated["data"][idx : idx + n_datasets],
+        }
+
+    def fake_random_posterior(**kwargs):
+        """Return posterior samples matching the current one-dataset batch."""
+
+        idx = call_id["value"] - kwargs["observed_data"]["data"].shape[0]
+        n_datasets = kwargs["observed_data"]["data"].shape[0]
+        return {"theta": random_samples["theta"][idx : idx + n_datasets]}
+
+    model.simulate = fake_simulate
+    model.sample_group_posterior = lambda **kwargs: {"theta_mu_raw": np.zeros((1, 2))}
+    model.sample_random_posterior = fake_random_posterior
+
+    fig = model.plot_random_recovery(n_datasets=2, num_samples=2, show_progress=False)
 
     offsets = fig.axes[0].collections[0].get_offsets()
     assert offsets.shape[0] == 2
     assert fig.axes[0].get_ylabel() == "corr"
+    plt.close(fig)
+
+
+def test_hierarchical_workflow_plot_random_recovery_runs_one_dataset_at_a_time():
+    """Random recovery should keep peak memory low by processing one dataset."""
+
+    model = HierarchicalWorkflow.__new__(HierarchicalWorkflow)
+    model.keep_subject_truth = ["theta"]
+    simulate_calls = []
+
+    def fake_simulate(n_datasets):
+        """Return one batch with two valid subject truth values per dataset."""
+
+        simulate_calls.append(n_datasets)
+        first = len(simulate_calls) * 0.1
+        truth = np.column_stack(
+            [
+                first + np.arange(n_datasets, dtype=float),
+                first + np.arange(n_datasets, dtype=float) + 0.1,
+            ]
+        )
+        return {"theta_subj": truth, "data": np.zeros((n_datasets, 2, 1))}
+
+    sample_group_num_samples = []
+    sample_group_batch_sizes = []
+    sample_random_batch_sizes = []
+
+    def fake_sample_group_posterior(**kwargs):
+        """Return group samples matching the current simulated batch size."""
+
+        sample_group_num_samples.append(kwargs["num_samples"])
+        sample_group_batch_sizes.append(kwargs["sample_batch_size"])
+        n_datasets = kwargs["test_data"]["data"].shape[0]
+        return {"theta_mu_raw": np.zeros((n_datasets, 2))}
+
+    def fake_sample_random_posterior(**kwargs):
+        """Return two posterior draws close to the simulated subject truth."""
+
+        sample_random_batch_sizes.append(kwargs["sample_batch_size"])
+        truth = kwargs["observed_data"]["theta_subj"]
+        return {"theta": np.stack([truth + 0.01, truth + 0.02], axis=1)}
+
+    model.simulate = fake_simulate
+    model.sample_group_posterior = fake_sample_group_posterior
+    model.sample_random_posterior = fake_sample_random_posterior
+
+    fig = model.plot_random_recovery(n_datasets=5, show_progress=False)
+
+    assert simulate_calls == [1, 1, 1, 1, 1]
+    assert sample_group_num_samples == [100, 100, 100, 100, 100]
+    assert sample_group_batch_sizes == [100, 100, 100, 100, 100]
+    assert sample_random_batch_sizes == [100, 100, 100, 100, 100]
+    offsets = fig.axes[0].collections[0].get_offsets()
+    assert offsets.shape[0] == 5
+    assert np.all(np.isfinite(offsets[:, 1]))
+    plt.close(fig)
+
+
+def test_hierarchical_workflow_plot_random_recovery_forwards_sample_batch_size():
+    """Random recovery should forward user sampling batch size to BayesFlow."""
+
+    model = HierarchicalWorkflow.__new__(HierarchicalWorkflow)
+    model.keep_subject_truth = ["theta"]
+    model.simulate = lambda n_datasets: {
+        "theta_subj": np.array([[0.1, 0.2]]),
+        "data": np.zeros((1, 2, 1)),
+    }
+    group_batch_sizes = []
+    random_batch_sizes = []
+
+    def fake_sample_group_posterior(**kwargs):
+        """Record the group posterior sampling mini-batch size."""
+
+        group_batch_sizes.append(kwargs["sample_batch_size"])
+        return {"theta_mu_raw": np.zeros((1, 2))}
+
+    def fake_sample_random_posterior(**kwargs):
+        """Record the random posterior sampling mini-batch size."""
+
+        random_batch_sizes.append(kwargs["sample_batch_size"])
+        return {"theta": np.array([[[0.11, 0.21], [0.12, 0.22]]])}
+
+    model.sample_group_posterior = fake_sample_group_posterior
+    model.sample_random_posterior = fake_sample_random_posterior
+
+    fig = model.plot_random_recovery(
+        n_datasets=1,
+        num_samples=2,
+        sample_batch_size=32,
+        show_progress=False,
+    )
+
+    assert group_batch_sizes == [32]
+    assert random_batch_sizes == [32]
     plt.close(fig)
 
 
@@ -391,6 +543,7 @@ def test_evaluation_diagnostics_plot_random_recovery_direct_call():
         params=None,
         metrics=["corr", "ccc", "rmse"],
         n_cols=3,
+        show_progress=False,
     )
 
     assert [ax.get_title() for ax in fig.axes] == ["corr", "ccc", "RMSE"]
@@ -427,7 +580,7 @@ def test_hierarchical_workflow_plot_random_recovery_requires_subject_truth():
     model.sample_random_posterior = lambda **kwargs: {"theta": np.zeros((1, 1, 1))}
 
     with pytest.raises(ValueError, match="keep_subject_truth"):
-        model.plot_random_recovery(n_datasets=1, num_samples=1)
+        model.plot_random_recovery(n_datasets=1, num_samples=1, show_progress=False)
 
 
 def test_train_workflow_stores_effective_training_config():
@@ -555,8 +708,11 @@ def test_sample_random_posterior_uses_paired_group_draws():
         sample_batch_size=3,
     )
 
-    assert model.random_workflow.last_sample_kwargs["num_samples"] == 1
     assert model.random_workflow.last_sample_kwargs["batch_size"] == 3
+    assert model.random_workflow.last_conditions["data"].shape == (1, 2, 1, 1)
+    group_condition = model.random_workflow.last_ancestral_conditions["theta_mu_raw"]
+    assert group_condition.shape == (1, 2, 1)
+    np.testing.assert_allclose(group_condition[:, :, 0], [[0.0, 0.5]])
     assert out["theta"].shape == (1, 2, 2)
     expected_z = np.array([[[1.0, 2.0], [1.5, 2.5]]], dtype=np.float32)
     expected_raw = np.array([[[1.0, 2.0], [3.5, 5.5]]], dtype=np.float32)
@@ -680,6 +836,31 @@ def test_sample_random_posterior_fixed_trial_count_accepts_match():
     assert out["theta"].shape == (1, 1, 1)
 
 
+def test_sample_random_posterior_fixed_trial_keeps_subject_axis_for_ancestral_sampling():
+    """Fixed trial subjects should use BayesFlow's ancestral child axis."""
+
+    model = _build_trial_random_model(trial_design="fixed")
+    observed = np.array(
+        [
+            [[1.0], [2.0], [3.0]],
+            [[4.0], [5.0], [6.0]],
+        ],
+        dtype=np.float32,
+    )
+
+    out = model.sample_random_posterior(
+        observed_data=observed,
+        group_samples=_trial_group_samples(n_samples=2),
+    )
+
+    condition_data = model.random_workflow.last_conditions["data"]
+    group_condition = model.random_workflow.last_ancestral_conditions["theta_mu_raw"]
+    assert condition_data.shape == (1, 2, 3, 1)
+    np.testing.assert_allclose(condition_data[0], observed)
+    assert group_condition.shape == (1, 2, 1)
+    assert out["theta"].shape == (1, 2, 2)
+
+
 def test_sample_random_posterior_flex_trial_pads_raw_single_subject():
     """Flex trial sampling should pad raw subject trials and add a mask."""
 
@@ -692,10 +873,10 @@ def test_sample_random_posterior_flex_trial_pads_raw_single_subject():
     )
 
     condition_data = model.random_workflow.last_conditions["data"]
-    assert condition_data.shape == (1, 4, 2)
-    np.testing.assert_allclose(condition_data[0, :3, 0], [1.0, 2.0, 3.0])
-    np.testing.assert_allclose(condition_data[0, :3, 1], 1.0)
-    np.testing.assert_allclose(condition_data[0, 3, :], 0.0)
+    assert condition_data.shape == (1, 1, 4, 2)
+    np.testing.assert_allclose(condition_data[0, 0, :3, 0], [1.0, 2.0, 3.0])
+    np.testing.assert_allclose(condition_data[0, 0, :3, 1], 1.0)
+    np.testing.assert_allclose(condition_data[0, 0, 3, :], 0.0)
     assert out["theta"].shape == (1, 1, 1)
 
 
@@ -714,9 +895,9 @@ def test_sample_random_posterior_flex_trial_pads_ragged_subjects():
     )
 
     condition_data = model.random_workflow.last_conditions["data"]
-    assert condition_data.shape == (2, 4, 2)
-    np.testing.assert_allclose(condition_data[0, :, 1], [1.0, 1.0, 0.0, 0.0])
-    np.testing.assert_allclose(condition_data[1, :, 1], [1.0, 1.0, 1.0, 0.0])
+    assert condition_data.shape == (1, 2, 4, 2)
+    np.testing.assert_allclose(condition_data[0, 0, :, 1], [1.0, 1.0, 0.0, 0.0])
+    np.testing.assert_allclose(condition_data[0, 1, :, 1], [1.0, 1.0, 1.0, 0.0])
     assert out["theta"].shape == (1, 1, 2)
 
 
@@ -736,8 +917,8 @@ def test_sample_random_posterior_flex_trial_accepts_padded_masked_data():
     )
 
     condition_data = model.random_workflow.last_conditions["data"]
-    assert condition_data.shape == (2, 4, 2)
-    np.testing.assert_allclose(condition_data, observed)
+    assert condition_data.shape == (1, 2, 4, 2)
+    np.testing.assert_allclose(condition_data[0], observed)
     assert out["theta"].shape == (1, 1, 2)
 
 

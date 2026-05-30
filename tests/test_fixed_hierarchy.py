@@ -56,6 +56,26 @@ def test_fixed_hierarchy_uses_exchangeable_group_level_workflow():
     assert "DeepSet" in type(model.summary_network).__name__
 
 
+def test_random_workflow_standardizes_data_conditions_and_z_targets():
+    """Random workflow should standardize all random-stage BayesFlow inputs."""
+
+    model = _build_fixed_hierarchy(
+        n_subjects=2,
+        n_trials=5,
+    )
+
+    model._build_random_workflow()
+    standardizer = model.random_workflow.approximator.standardizer
+
+    expected = [
+        "inference_variables",
+        "summary_variables",
+        "inference_conditions",
+    ]
+    assert standardizer.standardize == expected
+    assert list(standardizer.standardize_layers) == expected
+
+
 def test_fixed_hierarchy_simulates_subject_truth():
     """Simulated fixed datasets should keep subject truth outside inference."""
 

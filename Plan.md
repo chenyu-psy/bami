@@ -236,6 +236,31 @@ then debugs and validates the current package before new 0.3.0 features begin.
   so it is present before BayesFlow, Keras, or Torch initialize their backend.
 - Unavailable `mps` and `cuda` requests still fall back to CPU, but now print a
   short user-facing message explaining the selected fallback device.
+- Optimized `HierarchicalWorkflow.sample_random_posterior(...)` for
+  BayesFlow-Ind-style hierarchical random-effect recovery. The public method
+  name and return contract are unchanged, but the implementation now delegates
+  to private workflow sampling helpers that call BayesFlow
+  `ancestral_sample(...)` with subject data and group posterior draws passed as
+  separate condition sets. This avoids the old Python/NumPy expansion of every
+  `dataset x subject x group_draw` row before BayesFlow sampling.
+- Kept `sample_random_posterior(...)` as a shallow workflow wrapper and moved
+  the reusable random posterior sampling implementation into
+  `bami.workflows._sampling`, keeping `evaluation` focused on diagnostics and
+  metrics.
+- Updated `plot_random_recovery(...)` for both the workflow alias and
+  `bami.evaluation.diagnostics.plot_random_recovery(...)` so the diagnostic
+  processes one simulated dataset at a time, computes dataset-level recovery
+  rows immediately, and discards posterior samples before moving to the next
+  dataset. Recovery plotting now exposes `sample_batch_size=100` for BayesFlow
+  posterior sampling mini-batches; this can improve throughput when memory is
+  available without changing the dataset-level recovery loop.
+- Updated the hierarchical random-effect workflow to standardize all
+  random-stage BayesFlow inputs: standardized subject deviations
+  (`inference_variables`), observed subject data (`summary_variables`), and raw
+  group parameters (`inference_conditions`). This is a generic
+  `HierarchicalWorkflow` fix, not a model-specific SDM workaround, and existing
+  saved random workflow files need retraining before they use the new
+  standardization.
 
 ### 3. Validation
 
@@ -248,6 +273,25 @@ then debugs and validates the current package before new 0.3.0 features begin.
 - Verified the MPS fallback path with a small Keras `Orthogonal()` initializer
   smoke test after `configure_torch_device("mps")`; the initializer completed
   with `PYTORCH_ENABLE_MPS_FALLBACK=1`.
+- Added regression coverage for the optimized random posterior route,
+  including paired group draws, fixed group components, fixed and flexible
+  trial data, ragged trial input, pre-padded masked trial input, and validation
+  of too-many-trials errors.
+- Added random recovery diagnostic coverage for one-dataset-at-a-time
+  processing, the lower `num_samples=100` default, and `sample_batch_size`
+  forwarding to both group and random posterior sampling calls.
+- Added regression coverage that builds a random workflow and checks that the
+  BayesFlow standardizer contains `inference_variables`, `summary_variables`,
+  and `inference_conditions`.
+- Targeted validation for the random-workflow standardization change passed:
+  `uv run pytest tests/test_fixed_hierarchy.py tests/test_evaluation_metrics_bayesflow.py`
+  in the `bami` package, and
+  `uv run python -m pytest tests/test_evaluation_metrics_bayesflow.py tests/test_fixed_hierarchy.py tests/test_ezdm_hierarchy.py tests/test_qmd_style.py`
+  in the `2026-bayesflow-Ind` analysis project.
+- Latest validation for these 0.2.2 changes passed:
+  `uv run pytest tests/test_evaluation_metrics_bayesflow.py`,
+  `uv run pytest`, `uv run ruff check`, and `uv build`. The full pytest run
+  reported only the existing Keras/Torch NumPy deprecation warnings.
 - Run the full check set after fixes:
   `uv run pytest`, `uv run ruff check .`, `uv run black --check .`, and
   `uv run mkdocs build`.
@@ -689,8 +733,8 @@ Completed.
 - Removed the old SDM degree-bin user interface, including `GRID_SIZE`,
   `grid_size`, `error_scale`, `jitter`, `sdm_probs`, and degree/index helper
   exports.
-- Updated SDM examples and fixtures to use `obs_names=["error_rad"]`, with
-  simulated and observed SDM data documented as radians in `[-pi, pi]`.
+- Updated SDM examples and fixtures to use `obs_names=["error"]`, with
+  continuous radian errors treated as the default SDM observation convention.
 - Aligned simulator navigation with the M3 and ezDM pages by exposing SDM as
   `SDM` and featuring only the workflow-facing simulator function.
 - Full `uv run pytest` passed with the existing Keras/Torch NumPy deprecation
