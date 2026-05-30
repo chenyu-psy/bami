@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-
 REQUIRED_CONTRACT_FIELDS = (
     "name",
     "param_names",
@@ -22,10 +21,7 @@ REQUIRED_CONTRACT_FIELDS = (
 VALID_OBSERVATIONS = {"aggregate", "trial"}
 
 
-def validate_workflow_contract(
-    contract: Mapping,
-    require_loglik: bool = False,
-) -> dict:
+def validate_workflow_contract(contract: Mapping) -> dict:
     """Validate and normalize a workflow contract.
 
     Parameters
@@ -34,11 +30,6 @@ def validate_workflow_contract(
         Mapping with model-specific workflow information. Required fields are
         ``name``, ``param_names``, ``priors``, ``simulator``, and
         ``data_width``.
-    require_loglik
-        Whether ``subject_loglik`` must be present. Set this to ``True`` for
-        posthoc individual recovery, where candidate parameters must be scored
-        against one subject's observed data.
-
     Returns
     -------
     dict
@@ -58,13 +49,6 @@ def validate_workflow_contract(
     out["data_width"] = _check_data_width(out["data_width"])
     _check_priors(out["priors"])
     _check_callable(out["simulator"], "simulator")
-
-    if "subject_loglik" in out and out["subject_loglik"] is not None:
-        _check_callable(out["subject_loglik"], "subject_loglik")
-    elif require_loglik:
-        raise ValueError(
-            "workflow contract must include subject_loglik for individual recovery."
-        )
 
     return out
 

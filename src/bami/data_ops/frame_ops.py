@@ -21,7 +21,9 @@ def drop_non_parameter_columns(df: pl.DataFrame) -> pl.DataFrame:
         Filtered table without `task` and `mean*` columns.
     """
 
-    keep_cols = [col for col in df.columns if not col.startswith("mean") and col != "task"]
+    keep_cols = [
+        col for col in df.columns if not col.startswith("mean") and col != "task"
+    ]
     return df.select(keep_cols)
 
 
@@ -40,7 +42,10 @@ def add_participant_rank(df: pl.DataFrame) -> pl.DataFrame:
     """
 
     return df.with_columns(
-        pl.col("nPart").rank("ordinal").over(["rep", "nResp", "parameter"]).alias("participant")
+        pl.col("nPart")
+        .rank("ordinal")
+        .over(["rep", "nResp", "parameter"])
+        .alias("participant")
     )
 
 

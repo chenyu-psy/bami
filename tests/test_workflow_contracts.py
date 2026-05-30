@@ -6,7 +6,6 @@ import pytest
 
 from bami.workflows import validate_observation, validate_workflow_contract
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -31,27 +30,8 @@ def _toy_simulator(theta, n_trials, rng):
     return [theta, n_trials]
 
 
-def _subject_loglik(data_row, candidates):
-    """Return a dummy subject log likelihood for contract tests.
-
-    Parameters
-    ----------
-    data_row
-        Observed subject data row.
-    candidates
-        Candidate parameter table.
-
-    Returns
-    -------
-    float
-        Dummy log likelihood value.
-    """
-
-    return 0.0
-
-
-def test_valid_training_contract_passes_without_loglik():
-    """Training and group recovery should not require subject_loglik."""
+def test_valid_training_contract_passes():
+    """Workflow fitting and group recovery should accept required fields."""
 
     contract = {
         "name": "demo",
@@ -66,26 +46,6 @@ def test_valid_training_contract_passes_without_loglik():
     assert out["name"] == "demo"
     assert out["param_names"] == ["theta"]
     assert out["data_width"] == 1
-
-
-def test_individual_recovery_contract_requires_loglik():
-    """Posthoc individual recovery should require a subject scoring function."""
-
-    contract = {
-        "name": "demo",
-        "param_names": ["theta"],
-        "priors": {},
-        "simulator": _toy_simulator,
-        "data_width": 1,
-    }
-
-    with pytest.raises(ValueError, match="subject_loglik"):
-        validate_workflow_contract(contract, require_loglik=True)
-
-    contract["subject_loglik"] = _subject_loglik
-    out = validate_workflow_contract(contract, require_loglik=True)
-
-    assert out["subject_loglik"] is _subject_loglik
 
 
 def test_contract_validation_reports_missing_fields():

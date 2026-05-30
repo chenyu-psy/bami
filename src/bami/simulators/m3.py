@@ -1,8 +1,9 @@
-"""Preset M3 simulation helpers.
+"""Custom M3 count simulator helpers.
 
-The functions in this module are small BayesFlow-free generators. They take
-public M3 parameter values and return simulated response counts that can later
-be wrapped by fixed, flexible, or hierarchical workflows.
+The public simulator accepts a user-provided activation function, converts
+activations to choice probabilities, and samples response counts. This keeps
+the model-specific activation logic visible in user code while reusing the
+shared count-sampling mechanics.
 """
 
 from __future__ import annotations
@@ -12,33 +13,82 @@ from collections.abc import Sequence
 import numpy as np
 
 
-DEFAULT_M3_OPTIONS = (1, 3, 1, 3, 4)
-
-
-def m3_activation(a: float, c: float, ra: float, rc: float, b: float = 0) -> np.ndarray:
-    """Return M3 response-category activation scores.
+def simulate_m3_custom(
+    n_trials: int,
+    activation_fn,
+    n_options: int | Sequence[int],
+    rule: str = "softmax",
+    rng=None,
+    **parms,
+) -> np.ndarray:
+    """Simulate response counts from a user-defined M3 activation function.
 
     Parameters
     ----------
-    a, c, ra, rc, b
-        Public-scale M3 parameters. The returned order is ``correct``,
-        ``other``, ``dist``, ``other_dist``, and ``new``.
+    n_trials
+        Number of responses to draw.
+    activation_fn
+        Function called as ``activation_fn(**parms)``. It must return a
+        one-dimensional vector of response-category activations.
+    n_options
+        Number of response options represented by each activation category.
+    rule
+        Choice rule used to convert activations to probabilities.
+    rng
+        Optional NumPy random generator. Defaults to ``np.random`` so existing
+        project-level seeding remains effective.
+    **parms
+        Public-scale model parameters passed to ``activation_fn``.
 
     Returns
     -------
     numpy.ndarray
-        Five activation scores in the fixed M3 response-category order.
+        Integer response counts with one count per activation category.
     """
 
-    correct = a + c + b
-    other = a + b
-    dist = ra * a + rc * c + b
-    other_dist = ra * a + b
-    new = b
-    return np.array([correct, other, dist, other_dist, new], dtype=float)
+    n_trials = _check_n_trials(n_trials)
+    if activation_fn is None:
+        raise ValueError("activation_fn is required for simulate_m3_custom.")
+    if not callable(activation_fn):
+        raise ValueError("activation_fn must be callable.")
+
+    rng = np.random if rng is None else rng
+    activations = activation_fn(**parms)
+    probs = _choice_probs(
+        activations,
+        n_options=n_options,
+        rule=rule,
+    )
+    return rng.multinomial(n_trials, probs).astype(np.int64)
 
 
-def choice_probs(
+def prop_m3(row, n_trials: int, model=None) -> np.ndarray:
+    """Convert one M3 count row to response proportions.
+
+    Parameters
+    ----------
+    row
+        Five response-category counts in M3 order.
+    n_trials
+        Number of responses represented by ``row``.
+    model
+        Unused workflow-compatible argument. Workflow row transforms may
+        receive the model object, but this normalization only needs ``row`` and
+        ``n_trials``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Response proportions with the same width as ``row``.
+    """
+
+    row_arr = np.asarray(row, dtype=np.float32)
+    if n_trials < 1:
+        raise ValueError("n_trials must be at least 1.")
+    return row_arr / float(n_trials)
+
+
+def _choice_probs(
     activations: Sequence[float],
     n_options: int | Sequence[int] | None = None,
     rule: str = "softmax",
@@ -50,13 +100,11 @@ def choice_probs(
     activations
         Response-category activation scores.
     n_options
-        Number of response options represented by each category. ``None`` uses
-        one option per category; a single integer is broadcast to all
-        categories.
+        Number of response options represented by each category. A single
+        integer is broadcast to all categories.
     rule
-        Choice rule. ``"softmax"`` uses the same temperature-2 softmax as the
-        current M3 workflow. ``"luce"`` treats activations as nonnegative Luce
-        strengths and normalizes them after option weighting.
+        Choice rule. ``"softmax"`` uses temperature-2 softmax. ``"luce"`` and
+        ``"simple"`` treat activations as nonnegative strengths.
 
     Returns
     -------
@@ -74,75 +122,6 @@ def choice_probs(
     if not np.isfinite(total) or total <= 0:
         raise ValueError("choice probabilities require positive total strength.")
     return weighted / total
-
-
-def simulate_m3_counts(
-    a: float,
-    c: float,
-    ra: float,
-    rc: float,
-    b: float = 0,
-    n_trials: int = 100,
-    n_options: int | Sequence[int] | None = DEFAULT_M3_OPTIONS,
-    rule: str = "softmax",
-    rng=None,
-) -> np.ndarray:
-    """Simulate one M3 response-count vector.
-
-    Parameters
-    ----------
-    a, c, ra, rc, b
-        Public-scale M3 parameters.
-    n_trials
-        Number of responses to draw.
-    n_options
-        Number of response options represented by each M3 category.
-    rule
-        Choice rule passed to ``choice_probs``.
-    rng
-        Optional NumPy random generator. Defaults to ``np.random`` so existing
-        project-level seeding remains effective.
-
-    Returns
-    -------
-    numpy.ndarray
-        Five integer response counts in M3 category order.
-    """
-
-    n_trials = _check_n_trials(n_trials)
-    rng = np.random if rng is None else rng
-    probs = choice_probs(
-        m3_activation(a=a, c=c, ra=ra, rc=rc, b=b),
-        n_options=n_options,
-        rule=rule,
-    )
-    return rng.multinomial(n_trials, probs).astype(np.int64)
-
-
-def normalize_m3_count_row(row, n_trials: int, model=None) -> np.ndarray:
-    """Scale one M3 count row for normalized hierarchy inputs.
-
-    Parameters
-    ----------
-    row
-        Five response-category counts in M3 order.
-    n_trials
-        Number of responses represented by ``row``.
-    model
-        Workflow object with ``n_trials_range`` when available. The upper end
-        of that range is used to put trial counts on a stable scale.
-
-    Returns
-    -------
-    numpy.ndarray
-        Five response proportions. The workflow appends the scaled trial count
-        separately when ``include_trial_feature`` is enabled.
-    """
-
-    row_arr = np.asarray(row, dtype=np.float32)
-    if n_trials < 1:
-        raise ValueError("n_trials must be at least 1.")
-    return row_arr / float(n_trials)
 
 
 def _resolve_n_options(
@@ -165,14 +144,14 @@ def _resolve_n_options(
     """
 
     if n_options is None:
-        option_counts = np.ones(n_categories, dtype=float)
-    elif isinstance(n_options, int):
+        raise ValueError("n_options is required.")
+    if isinstance(n_options, int):
         option_counts = np.full(n_categories, n_options, dtype=float)
     else:
         option_counts = np.asarray(n_options, dtype=float)
         if option_counts.shape != (n_categories,):
             raise ValueError(
-                "n_options must be None, an integer, or a vector matching activations."
+                "n_options must be an integer or a vector matching activations."
             )
 
     if np.any(~np.isfinite(option_counts)) or np.any(option_counts <= 0):
@@ -215,7 +194,7 @@ def _weighted_strengths(
             raise ValueError(f"{rule} rule requires nonnegative activations.")
         return activations * n_options
 
-    raise ValueError("rule must be 'softmax' or 'luce'.")
+    raise ValueError("rule must be 'softmax', 'luce', or 'simple'.")
 
 
 def _check_n_trials(n_trials: int) -> int:

@@ -1,111 +1,35 @@
 """Trial-level SDM simulation helpers.
 
-The standard SDM represents observations as trial-level signed circular errors.
-msSDM moment summaries live in a separate module.
+Use this module when an SDM workflow needs simulated signed circular errors in
+radians. The public simulator keeps the researcher-facing model simple: pass
+``c`` and ``kappa``, receive one continuous radian error per trial.
 """
 
 from __future__ import annotations
 
 import numpy as np
-from scipy.special import i0, logsumexp
+from scipy.special import i0
 
-from bami.simulators.circular import GRID_SIZE, check_n_trials, indices_to_errors
+from bami.simulators.circular import check_n_trials
 
-
-def von_mises_kernel(kappa: float, grid_size: int = GRID_SIZE) -> np.ndarray:
-    """Evaluate the SDM von Mises kernel on the circular grid.
-
-    Parameters
-    ----------
-    kappa
-        Concentration of the von Mises kernel.
-    grid_size
-        Number of grid bins.
-
-    Returns
-    -------
-    numpy.ndarray
-        Kernel values for each SDM error bin.
-    """
-
-    if kappa <= 0:
-        raise ValueError("kappa must be positive.")
-
-    theta = np.arange(grid_size) * 2.0 * np.pi / grid_size
-    return np.exp(kappa * np.cos(theta)) / (2.0 * np.pi * i0(kappa))
+_SUPPORT_SIZE = 4096
 
 
-def sdm_log_probs(c: float, kappa: float, grid_size: int = GRID_SIZE) -> np.ndarray:
-    """Compute SDM log probabilities for all error bins.
-
-    Parameters
-    ----------
-    c
-        Strength applied to the von Mises activation profile.
-    kappa
-        Concentration of the von Mises kernel.
-    grid_size
-        Number of grid bins.
-
-    Returns
-    -------
-    numpy.ndarray
-        Log probabilities with length ``grid_size``.
-    """
-
-    if c <= 0:
-        raise ValueError("c must be positive.")
-
-    activation = c * von_mises_kernel(kappa, grid_size=grid_size)
-    return activation - logsumexp(activation)
-
-
-def sdm_probs(c: float, kappa: float, grid_size: int = GRID_SIZE) -> np.ndarray:
-    """Compute SDM probabilities for all error bins.
-
-    Parameters
-    ----------
-    c
-        Strength applied to the von Mises activation profile.
-    kappa
-        Concentration of the von Mises kernel.
-    grid_size
-        Number of grid bins.
-
-    Returns
-    -------
-    numpy.ndarray
-        Probabilities that sum to one.
-    """
-
-    return np.exp(sdm_log_probs(c=c, kappa=kappa, grid_size=grid_size))
-
-
-def simulate_sdm_errors(
+def simulate_sdm_simple(
     c: float,
     kappa: float,
     n_trials: int = 100,
-    grid_size: int = GRID_SIZE,
-    error_scale: float | None = None,
-    jitter: bool = True,
     rng=None,
 ) -> np.ndarray:
-    """Simulate trial-level SDM circular errors.
+    """Simulate continuous trial-level SDM errors in radians.
 
     Parameters
     ----------
     c, kappa
-        Public-scale SDM parameters.
+        Public-scale SDM parameters. ``c`` controls activation strength and
+        ``kappa`` controls the concentration of the circular similarity kernel.
     n_trials
         Number of trial-level errors to simulate.
-    grid_size
-        Number of circular-error bins used by the SDM probability grid.
-    error_scale
-        Optional divisor applied to signed degree errors. Use ``180`` to pass
-        approximately unit-scaled errors to a neural network while preserving
-        the circular ordering.
-    jitter
-        Whether to add uniform within-bin jitter before circular wrapping.
     rng
         Optional NumPy random generator. Defaults to ``np.random`` so existing
         project-level seeding remains effective.
@@ -113,20 +37,149 @@ def simulate_sdm_errors(
     Returns
     -------
     numpy.ndarray
-        Trial-level signed errors with shape ``(n_trials, 1)``.
+        Trial-level signed circular errors in radians with shape
+        ``(n_trials, 1)``. Values lie in ``[-pi, pi]``.
     """
 
+    checked_c = _check_positive_float(c, "c")
+    checked_kappa = _check_positive_float(kappa, "kappa")
     checked_trials = check_n_trials(n_trials)
     rng = np.random if rng is None else rng
-    probs = sdm_probs(c=c, kappa=kappa, grid_size=grid_size)
-    indices = rng.choice(grid_size, size=checked_trials, replace=True, p=probs)
-    errors = indices_to_errors(indices, grid_size=grid_size)
-    if jitter:
-        errors = errors + rng.uniform(-0.5, 0.5, size=checked_trials)
-        errors = ((errors + 180.0) % 360.0) - 180.0
-    if error_scale is not None:
-        checked_scale = float(error_scale)
-        if checked_scale <= 0:
-            raise ValueError("error_scale must be positive.")
-        errors = errors / checked_scale
+
+    errors = _sample_sdm_errors(
+        c=checked_c,
+        kappa=checked_kappa,
+        n_trials=checked_trials,
+        rng=rng,
+    )
     return np.asarray(errors, dtype=np.float32).reshape(-1, 1)
+
+
+def _sample_sdm_errors(c: float, kappa: float, n_trials: int, rng) -> np.ndarray:
+    """Draw signed radian errors from the continuous SDM density.
+
+    Parameters
+    ----------
+    c, kappa
+        Validated public-scale SDM parameters.
+    n_trials
+        Number of errors to draw.
+    rng
+        NumPy-compatible random generator.
+
+    Returns
+    -------
+    numpy.ndarray
+        One-dimensional array of signed radian errors.
+    """
+
+    support = np.linspace(-np.pi, np.pi, _SUPPORT_SIZE + 1)
+    density = _sdm_density_unnormalized(support, c=c, kappa=kappa)
+    cdf = _trapezoid_cdf(support, density)
+    draws = rng.uniform(0.0, cdf[-1], size=n_trials)
+    errors = np.interp(draws, cdf, support)
+    return _wrap_radians(errors)
+
+
+def _sdm_density_unnormalized(
+    error_rad: np.ndarray,
+    c: float,
+    kappa: float,
+) -> np.ndarray:
+    """Evaluate the unnormalized continuous SDM density.
+
+    Parameters
+    ----------
+    error_rad
+        Signed circular errors in radians.
+    c, kappa
+        Validated public-scale SDM parameters.
+
+    Returns
+    -------
+    numpy.ndarray
+        Positive density values proportional to
+        ``exp(c * similarity(error_rad; kappa))``.
+    """
+
+    activation = c * _von_mises_similarity(error_rad, kappa=kappa)
+    return np.exp(activation - np.max(activation))
+
+
+def _von_mises_similarity(error_rad: np.ndarray, kappa: float) -> np.ndarray:
+    """Return SDM circular similarity for radian errors.
+
+    Parameters
+    ----------
+    error_rad
+        Signed circular errors in radians.
+    kappa
+        Concentration of the circular similarity kernel.
+
+    Returns
+    -------
+    numpy.ndarray
+        Similarity values at each error.
+    """
+
+    return np.exp(kappa * np.cos(error_rad)) / (2.0 * np.pi * i0(kappa))
+
+
+def _trapezoid_cdf(support: np.ndarray, density: np.ndarray) -> np.ndarray:
+    """Return a cumulative distribution from sampled density values.
+
+    Parameters
+    ----------
+    support
+        Increasing radian support values.
+    density
+        Positive density values evaluated at ``support``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Cumulative area values with the same length as ``support``.
+    """
+
+    widths = np.diff(support)
+    areas = 0.5 * (density[:-1] + density[1:]) * widths
+    return np.concatenate(([0.0], np.cumsum(areas)))
+
+
+def _wrap_radians(errors: np.ndarray) -> np.ndarray:
+    """Wrap signed circular errors to ``[-pi, pi]``.
+
+    Parameters
+    ----------
+    errors
+        Radian error values.
+
+    Returns
+    -------
+    numpy.ndarray
+        Wrapped radian errors.
+    """
+
+    return ((errors + np.pi) % (2.0 * np.pi)) - np.pi
+
+
+def _check_positive_float(value: float, name: str) -> float:
+    """Return a positive finite floating-point value.
+
+    Parameters
+    ----------
+    value
+        Candidate numeric value.
+    name
+        Parameter name used in error messages.
+
+    Returns
+    -------
+    float
+        Positive finite value.
+    """
+
+    checked = float(value)
+    if not np.isfinite(checked) or checked <= 0:
+        raise ValueError(f"{name} must be positive.")
+    return checked

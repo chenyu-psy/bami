@@ -2,8 +2,8 @@
 
 import numpy as np
 
-from fixtures_model_specs import M3_SPEC
-from bami.simulators.m3 import simulate_m3_counts
+from fixtures_model_specs import M3_SPEC, m3_activation
+from bami.simulators.m3 import simulate_m3_custom
 from bami.workflows import SimpleWorkflow
 
 
@@ -15,9 +15,13 @@ def test_flex_simple_simulator_adds_total_response_feature():
         name=M3_SPEC["model_name"],
         param_names=["a", "c", "ra", "rc"],
         priors=M3_SPEC["priors"],
-        simulator=simulate_m3_counts,
+        simulator=simulate_m3_custom,
         observation="aggregate",
-        simulator_kwargs={"n_options": M3_SPEC["n_options"], "rule": M3_SPEC["rule"]},
+        simulator_kwargs={
+            "activation_fn": m3_activation,
+            "n_options": M3_SPEC["n_options"],
+            "rule": M3_SPEC["rule"],
+        },
         data_width=len(M3_SPEC["activation_contract"]["order"]),
         n_trials=None,
         n_trials_range=(5, 9),

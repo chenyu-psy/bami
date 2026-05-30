@@ -4,86 +4,203 @@ import numpy as np
 import pytest
 
 from bami.simulators import (
-    choice_probs,
-    errors_to_ms_sdm_summary,
-    ezdm_moments,
-    m3_activation,
-    sdm_probs,
-    simulate_ezdm_summary,
-    simulate_m3_counts,
-    simulate_ms_sdm_summary,
-    simulate_sdm_errors,
+    prop_m3,
+    simulate_ezdm_simple,
+    simulate_m3_custom,
+    simulate_sdm_simple,
 )
 
 
-def test_m3_activation_and_choice_probabilities_are_valid():
-    """M3 helpers should produce valid probabilities under supported rules."""
+def _custom_activation(alpha, beta, mix):
+    """Return a compact custom activation vector for simulator tests.
 
-    activations = m3_activation(a=0.8, c=0.6, ra=0.4, rc=0.3, b=0)
-    softmax_probs = choice_probs(
-        activations,
-        n_options=[1, 3, 1, 3, 4],
-        rule="softmax",
-    )
-    luce_probs = choice_probs(
-        activations,
-        n_options=[1, 3, 1, 3, 4],
-        rule="luce",
-    )
+    Parameters
+    ----------
+    alpha, beta, mix
+        Public-scale model parameters passed by ``simulate_m3_custom``.
 
-    assert activations.shape == (5,)
-    assert softmax_probs.shape == (5,)
-    assert luce_probs.shape == (5,)
-    assert np.all(softmax_probs > 0)
-    assert np.all(luce_probs >= 0)
-    assert np.isclose(softmax_probs.sum(), 1.0)
-    assert np.isclose(luce_probs.sum(), 1.0)
+    Returns
+    -------
+    list[float]
+        Three activation scores used to test non-default category widths.
+    """
+
+    return [alpha + beta, mix * alpha, beta]
 
 
-def test_m3_simulator_returns_reproducible_counts():
-    """M3 count simulation should be reproducible with an explicit rng."""
+def _bad_2d_activation(alpha, beta, mix):
+    """Return a two-dimensional activation array for validation tests.
 
-    first = simulate_m3_counts(
-        a=0.8,
-        c=0.6,
-        ra=0.4,
-        rc=0.3,
+    Parameters
+    ----------
+    alpha, beta, mix
+        Accepted for compatibility with ``simulate_m3_custom``.
+
+    Returns
+    -------
+    list[list[float]]
+        Invalid nested activation values.
+    """
+
+    return [[1.0, 2.0]]
+
+
+def _bad_nan_activation(alpha, beta, mix):
+    """Return a non-finite activation vector for validation tests.
+
+    Parameters
+    ----------
+    alpha, beta, mix
+        Accepted for compatibility with ``simulate_m3_custom``.
+
+    Returns
+    -------
+    list[float]
+        Invalid activation values with one NaN.
+    """
+
+    return [1.0, np.nan, 0.2]
+
+
+def test_m3_custom_simulator_returns_reproducible_counts():
+    """Custom M3 count simulation should be reproducible with an explicit rng."""
+
+    first = simulate_m3_custom(
+        alpha=0.8,
+        beta=0.6,
+        mix=0.4,
         n_trials=50,
+        activation_fn=_custom_activation,
+        n_options=[1, 2, 1],
         rng=np.random.default_rng(2026),
     )
-    second = simulate_m3_counts(
-        a=0.8,
-        c=0.6,
-        ra=0.4,
-        rc=0.3,
+    second = simulate_m3_custom(
+        alpha=0.8,
+        beta=0.6,
+        mix=0.4,
         n_trials=50,
+        activation_fn=_custom_activation,
+        n_options=[1, 2, 1],
         rng=np.random.default_rng(2026),
     )
 
     assert np.array_equal(first, second)
-    assert first.shape == (5,)
+    assert first.shape == (3,)
     assert np.all(first >= 0)
     assert np.allclose(first, np.round(first))
     assert first.sum() == 50
 
 
-def test_m3_luce_rejects_negative_strengths():
-    """Luce choice should not silently accept negative strengths."""
+def test_m3_custom_simulator_uses_custom_activation_width():
+    """Custom M3 simulation should follow the activation function width."""
+
+    out = simulate_m3_custom(
+        alpha=0.8,
+        beta=0.6,
+        mix=0.4,
+        n_trials=40,
+        activation_fn=_custom_activation,
+        n_options=[1, 2, 1],
+        rng=np.random.default_rng(2026),
+    )
+
+    assert out.shape == (3,)
+    assert np.all(out >= 0)
+    assert out.sum() == 40
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"activation_fn": "not callable"}, "activation_fn must be callable"),
+        ({"activation_fn": _bad_2d_activation}, "one-dimensional"),
+        (
+            {"activation_fn": _custom_activation, "n_options": None},
+            "n_options is required",
+        ),
+        (
+            {"activation_fn": _custom_activation, "n_options": [1, 2]},
+            "n_options must be an integer or a vector matching activations",
+        ),
+        ({"activation_fn": _custom_activation, "rule": "bad"}, "rule must be"),
+        ({"activation_fn": _bad_nan_activation}, "activations must be finite"),
+        ({"activation_fn": _custom_activation, "n_trials": 0}, "n_trials"),
+    ],
+)
+def test_m3_custom_simulator_rejects_invalid_inputs(kwargs, message):
+    """Custom M3 simulation should fail clearly for invalid settings."""
+
+    params = {
+        "alpha": 0.8,
+        "beta": 0.6,
+        "mix": 0.4,
+        "n_trials": 40,
+        "n_options": [1, 2, 1],
+        "rng": np.random.default_rng(2026),
+    }
+    params.update(kwargs)
+
+    with pytest.raises(ValueError, match=message):
+        simulate_m3_custom(**params)
+
+
+def test_m3_custom_luce_rejects_negative_strengths():
+    """Luce choice should not silently accept negative custom strengths."""
+
+    def negative_activation(alpha, beta, mix):
+        """Return one negative strength for Luce-rule validation.
+
+        Parameters
+        ----------
+        alpha, beta, mix
+            Accepted for compatibility with ``simulate_m3_custom``.
+
+        Returns
+        -------
+        list[float]
+            Strengths containing one invalid negative value.
+        """
+
+        return [1.0, -0.1, 0.2]
 
     with pytest.raises(ValueError, match="nonnegative"):
-        choice_probs([1.0, -0.1, 0.2], rule="luce")
+        simulate_m3_custom(
+            alpha=0.8,
+            beta=0.6,
+            mix=0.4,
+            n_trials=40,
+            activation_fn=negative_activation,
+            n_options=[1, 2, 1],
+            rule="luce",
+            rng=np.random.default_rng(2026),
+        )
+
+
+def test_prop_m3_returns_proportions():
+    """M3 count normalization should convert counts to response proportions."""
+
+    out = prop_m3(np.array([2, 1, 1, 0, 1]), n_trials=5)
+
+    assert np.allclose(out, np.array([0.4, 0.2, 0.2, 0.0, 0.2]))
+
+
+def test_prop_m3_rejects_invalid_trial_count():
+    """M3 count normalization should reject impossible trial totals."""
+
+    with pytest.raises(ValueError, match="n_trials"):
+        prop_m3(np.array([2, 1, 1, 0, 1]), n_trials=0)
 
 
 def test_sdm_error_simulator_returns_trial_level_errors():
     """SDM error simulation should return reproducible continuous trial rows."""
 
-    first = simulate_sdm_errors(
+    first = simulate_sdm_simple(
         c=3.0,
         kappa=4.0,
         n_trials=40,
         rng=np.random.default_rng(2026),
     )
-    second = simulate_sdm_errors(
+    second = simulate_sdm_simple(
         c=3.0,
         kappa=4.0,
         n_trials=40,
@@ -92,96 +209,31 @@ def test_sdm_error_simulator_returns_trial_level_errors():
 
     assert np.array_equal(first, second)
     assert first.shape == (40, 1)
-    assert np.all(first >= -180)
-    assert np.all(first < 180)
+    assert np.all(first >= -np.pi)
+    assert np.all(first <= np.pi)
     assert not np.allclose(first, np.round(first))
 
 
-def test_sdm_error_simulator_can_return_scaled_errors():
-    """SDM error simulation should support unit-scaled neural-network inputs."""
+def test_sdm_error_simulator_rejects_invalid_parameters():
+    """SDM error simulation should reject impossible public parameters."""
 
-    out = simulate_sdm_errors(
-        c=3.0,
-        kappa=4.0,
-        n_trials=40,
-        error_scale=180,
-        rng=np.random.default_rng(2026),
-    )
-
-    assert out.shape == (40, 1)
-    assert np.all(out >= -1)
-    assert np.all(out < 1)
-
-
-def test_ms_sdm_summary_matches_known_circular_moments():
-    """msSDM summaries should store first- and second-order circular moments."""
-
-    out = errors_to_ms_sdm_summary(np.array([0.0, 90.0]))
-
-    assert out.shape == (5,)
-    assert out[0] == pytest.approx(0.5)
-    assert out[1] == pytest.approx(0.5)
-    assert out[2] == pytest.approx(0.0)
-    assert out[3] == pytest.approx(0.0, abs=1e-7)
-    assert out[4] == 2
-
-
-def test_ms_sdm_summary_converts_scaled_errors_to_degrees():
-    """msSDM summaries should accept unit-scaled errors when scale is provided."""
-
-    out = errors_to_ms_sdm_summary(np.array([0.0, 0.5]), error_scale=180.0)
-
-    assert out[0] == pytest.approx(0.5)
-    assert out[1] == pytest.approx(0.5)
-    assert out[2] == pytest.approx(0.0)
-    assert out[3] == pytest.approx(0.0, abs=1e-7)
-    assert out[4] == 2
-
-
-def test_ms_sdm_summary_rejects_invalid_errors():
-    """msSDM summaries should fail clearly for missing or empty trial data."""
-
-    with pytest.raises(ValueError, match="at least one trial"):
-        errors_to_ms_sdm_summary(np.array([]))
-    with pytest.raises(ValueError, match="missing or infinite"):
-        errors_to_ms_sdm_summary(np.array([0.0, np.nan]))
-
-
-def test_ms_sdm_simulator_returns_reproducible_summary():
-    """msSDM simulation should return reproducible circular-moment summaries."""
-
-    first = simulate_ms_sdm_summary(
-        c=3.0,
-        kappa=4.0,
-        n_trials=40,
-        rng=np.random.default_rng(2026),
-    )
-    second = simulate_ms_sdm_summary(
-        c=3.0,
-        kappa=4.0,
-        n_trials=40,
-        rng=np.random.default_rng(2026),
-    )
-
-    assert np.array_equal(first, second)
-    assert first.shape == (5,)
-    assert np.all(first[:4] >= -1)
-    assert np.all(first[:4] <= 1)
-    assert first[4] == 40
+    with pytest.raises(ValueError, match="c"):
+        simulate_sdm_simple(c=0.0, kappa=4.0, n_trials=10)
+    with pytest.raises(ValueError, match="kappa"):
+        simulate_sdm_simple(c=3.0, kappa=0.0, n_trials=10)
 
 
 def test_ezdm_simulator_returns_reproducible_summary():
     """ezDM summary simulation should return pc, mrt, and vrt."""
 
-    moments = ezdm_moments(v=0.1, a=0.14, t0=0.3, s=0.1)
-    first = simulate_ezdm_summary(
+    first = simulate_ezdm_simple(
         v=0.1,
         a=0.14,
         t0=0.3,
         n_trials=50,
         rng=np.random.default_rng(2026),
     )
-    second = simulate_ezdm_summary(
+    second = simulate_ezdm_simple(
         v=0.1,
         a=0.14,
         t0=0.3,
@@ -189,9 +241,8 @@ def test_ezdm_simulator_returns_reproducible_summary():
         rng=np.random.default_rng(2026),
     )
 
-    assert moments["pc"] == pytest.approx(0.802, abs=0.001)
     assert np.array_equal(first, second)
     assert first.shape == (3,)
     assert 0 < first[0] < 1
-    assert first[1] > 0
-    assert first[2] > 0
+    assert first[1] == pytest.approx(0.723, abs=0.001)
+    assert first[2] == pytest.approx(0.112, abs=0.001)

@@ -1,5 +1,13 @@
 .venv/
+.claude/
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+site/
 __pycache__/
 *.py[cod]
 .DS_Store
