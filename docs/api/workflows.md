@@ -205,9 +205,11 @@ an active-trial mask automatically.
 
 ### Subject truth
 
-Use `keep_subject_truth=True` in hierarchical workflows when recovery checks
-need subject-level true values. This stores subject values for later evaluation
-without changing the simulator interface.
+Use `keep_subject_truth=None` in hierarchical workflows when recovery checks
+need all stochastic subject-level true values. This is the default. Use a list
+such as `keep_subject_truth=["a", "c"]` to save only selected parameters, or
+`keep_subject_truth=[]` to save none. Subject truth is stored for later
+evaluation without changing the simulator interface.
 
 ## Common workflow actions
 

@@ -148,10 +148,258 @@ Completed for the current simple SDM and hierarchical ezDM examples.
 - Record future platform-specific findings here if users or CI expose behavior
   that was not visible in the static portability audit.
 
-## Next Milestone: New Features and Research Prototypes
+## Milestone 0.2.1: Workflow-Wide API Alignment
 
-These items are intentionally deferred. They should start only after the current
-code review and website polish milestone is complete.
+Completed for version `0.2.1`.
+
+This milestone completes workflow-wide changes that were identified while
+planning `MultiConditionWorkflow`. These changes affect existing workflows and
+should be implemented before adding the new multi-condition workflow.
+
+### 1. Posterior Sampling and Dataframe Conversion
+
+- Keep public `sample_*` methods dictionary-based so downstream workflow logic
+  can reuse raw BayesFlow keys when needed.
+- Preserve this contract for existing public workflow sampling methods before
+  adding `MultiConditionWorkflow`: `SimpleWorkflow.sample_posterior(...)`,
+  `HierarchicalWorkflow.sample_group_posterior(...)`, and
+  `HierarchicalWorkflow.sample_random_posterior(...)`.
+- Add a general `bami.utils.posterior_to_dataframe(...)` helper for users who
+  want tidy posterior tables for analysis, plotting, or export.
+- Sampling dictionaries may include raw keys such as `theta_raw`,
+  `theta_mu_raw`, `theta_log_sigma`, `theta_subj_raw`, and `theta_z`.
+  `posterior_to_dataframe(..., include_raw=False)` should hide those by
+  default and show researcher-facing public-scale values.
+- Use the minimal posterior dataframe columns:
+  `dataset`, `draw`, `level`, `param`, `basis`, `quantity`, and `value`.
+- `value` is on the user-interpretable scale by default. Raw-space values are
+  opt-in through `include_raw=True`, using readable `quantity` labels such as
+  `raw`, `mu_raw`, `log_sigma`, and `z` rather than extra dataframe columns.
+- Use `basis="global"` for simple or non-condition-specific parameters.
+- Use `basis="subject:<slot>"` for existing random-effect subject samples.
+- Represent correlation rows with `param="cor"`, `quantity="corr"`, and a
+  readable `basis` such as `drift_A1:B1__drift_A1:B2` when correlations are
+  available in later workflows.
+
+### 2. Subject Truth Defaults
+
+- Update hierarchical truth handling before `MultiConditionWorkflow` so
+  `keep_subject_truth=None` saves all stochastic subject-level truth,
+  `keep_subject_truth=["a", "c"]` saves only listed parameters, and
+  `keep_subject_truth=[]` saves none.
+- Apply this rule to existing `HierarchicalWorkflow` first. `SimpleWorkflow`
+  does not have subject-level truth.
+- Update examples, diagnostics, and tests that currently assume subject truth
+  is opt-in.
+
+### 3. Documentation and Regression Checks
+
+- Update docs and examples to show that `sample_*` methods return dictionaries,
+  and that `posterior_to_dataframe(...)` is the analysis/reporting conversion
+  step.
+- Keep internal diagnostics working with the existing dictionary sample
+  contract.
+- Full checks passed after this milestone:
+  `uv run pytest`, `uv run ruff check .`, `uv run black --check .`, and
+  `uv run mkdocs build`. `pytest` reported only the existing Keras/Torch NumPy
+  deprecation warnings, `black --check` reported the existing Python 3.14 /
+  Python 3.15 target warning, and `mkdocs build` reported the existing Material
+  for MkDocs 2.0 warning.
+
+## Milestone 0.2.2: BayesFlow-Ind Compatibility and Validation
+
+This milestone matches `bami` to the `2026-bayesflow-Ind` project workflow,
+then debugs and validates the current package before new 0.3.0 features begin.
+
+### 1. Match the Target Workflow
+
+- Review the relevant `2026-bayesflow-Ind` usage patterns and expected workflow
+  behavior.
+- Compare those expectations against the current `bami` simple, hierarchical,
+  training, sampling, posterior-dataframe, and subject-truth contracts.
+- Record any mismatch as a concrete task with affected files, expected
+  behavior, and a minimal test case.
+
+### 2. Debug and Fix Compatibility Bugs
+
+- Fix bugs exposed by matching `bami` to `2026-bayesflow-Ind`.
+- Prefer small, focused fixes that preserve the 0.2.1 workflow-wide contracts.
+- Do not start `MultiConditionWorkflow` implementation while compatibility bugs
+  from this milestone remain unresolved.
+
+### 3. Validation
+
+- Add regression tests for every compatibility bug that is fixed.
+- Validate at least one representative simple workflow and one representative
+  hierarchical workflow from the target usage pattern.
+- Run the full check set after fixes:
+  `uv run pytest`, `uv run ruff check .`, `uv run black --check .`, and
+  `uv run mkdocs build`.
+- Record any unresolved compatibility gap with exact reproduction steps before
+  starting 0.3.0 work.
+
+## Milestone 0.3.0: MultiConditionWorkflow
+
+Start this milestone only after 0.2.1 workflow-wide API alignment and 0.2.2
+BayesFlow-Ind compatibility validation are complete.
+
+This milestone adds `MultiConditionWorkflow` for aggregate multi-condition
+hierarchical models. The workflow is parallel to `HierarchicalWorkflow`, not an
+extension of `SimpleWorkflow`. It uses cell-specific coding, similar to
+`0 + condition`, and estimates group means, subject-level SDs, and selected
+subject-level raw-effect correlations.
+
+### 1. Workflow Scope and Data Contract
+
+- Add a new public `MultiConditionWorkflow`.
+- Support only `observation="aggregate"` in the first implementation.
+- Keep `SimpleWorkflow` separate because simple workflows do not have a
+  subject-level correlation structure.
+- Keep simulator calls condition-agnostic. The workflow chooses parameter
+  values for each condition cell, calls
+  `simulator(**params, n_trials=..., rng=...)`, and stores the returned row in
+  the matching condition cell.
+- Preserve the condition axis in simulated data:
+  `sim["data"].shape == (n_datasets, n_subjects, n_condition_cells,
+  feature_width)`.
+- For BayesFlow summaries, flatten each subject's condition-by-feature matrix
+  in fixed condition order, then summarize the exchangeable subject rows with a
+  set network.
+- Treat subjects as exchangeable. Do not treat condition cells as exchangeable.
+
+### 2. Condition Design
+
+- Name the workflow argument `condition`.
+- Allow users to provide manual cells:
+  `condition=[{"A": "A1", "B": "B1"}, {"A": "A1", "B": "B2"}]`.
+- Add a `condition_factors(...)` helper under `bami.utils` to generate full
+  factorial cells, for example
+  `condition=condition_factors({"A": ["A1", "A2"], "B": ["B1", "B2"]})`.
+- `condition_factors(...)` returns a small `ConditionDesign` object.
+- `condition=` accepts either a `ConditionDesign` or a manually written list of
+  cell dictionaries. The workflow normalizes both forms to `ConditionDesign`.
+- Internally store `cells`, `cell_names`, and `factors` on `ConditionDesign`
+  because these data are small and are needed for validation, parameter naming,
+  and dataframe conversion.
+- Use `:` between factor levels in cell labels, for example `A1:B2`. Do not
+  use `_` inside condition cell labels.
+
+### 3. Effects Syntax
+
+- Use one `effects` argument to define both condition basis and correlation
+  mode:
+  `effects=["a ~ A | none", "c ~ A:B | levels",
+  "a + c + slope ~ A:B | pairs", "bias + asy ~ A:B | block"]`.
+- `none` means the parameter varies by the basis, but subject-level effects are
+  independent.
+- `levels` means the same parameter is correlated across basis levels or cells.
+- `pairs` means different parameters are correlated within the same basis level
+  or cell.
+- `block` means one full joint correlation block over parameters by basis
+  levels or cells.
+- Parameters not listed in `effects` default to full-cell basis with `none`.
+- The right-hand side of `~` defines the basis. `A:B` means the factorial cell
+  basis for factors `A` and `B`.
+- `block` already includes the corresponding `levels` and `pairs` structure, so
+  overlapping `block` and `pairs` or `levels` declarations are invalid.
+- Add `validate_effect_terms(...)` to parse and validate effects. Conflicts
+  raise `ValueError`; harmless duplicate or mergeable terms issue
+  `warnings.warn(...)`; the final contract deduplicates pairs and blocks.
+
+### 4. Priors and Correlations
+
+- Each parameter-by-basis-level effect gets its own group mean and
+  subject-level SD.
+- Each level uses the same `priors[param]` template, but the resulting group
+  parameters are distinct.
+- Estimate correlations as group-level parameters on the raw subject-effect
+  scale.
+- Add correlation-specific LKJ support outside the scalar prior parser.
+- Default `corr_prior` to `"lkj(1)"` and use it globally for all `levels`,
+  `pairs`, and `block` structures.
+- `none` does not use `corr_prior`.
+
+### 5. Parameter Naming
+
+- Use brms-like flat keys with `_` separating semantic fields and `:`
+  separating condition factor levels.
+- Internal group inference variables use
+  `param_basis_quantity_scale`, for example
+  `drift_A1:B2_mu_raw` and `drift_A1:B2_sigma_log`.
+- Posterior transforms may add public keys such as `drift_A1:B2_mu` and
+  `drift_A1:B2_sigma`.
+- Correlation keys use `cor_left__right`, for example
+  `cor_drift_A1:B1__drift_A1:B2`.
+- Correlation keys do not include `_raw`; documentation should state that
+  correlations are raw-scale correlations.
+
+### 6. Subject Truth and Simulator Mapping
+
+- Build on the 0.2.1 hierarchical truth rule:
+  `keep_subject_truth=None` saves all stochastic subject-level truth,
+  `keep_subject_truth=["a", "c"]` saves only listed parameters, and
+  `keep_subject_truth=[]` saves none.
+- For `MultiConditionWorkflow`, save subject truth as arrays:
+  `sim["<param>_subj"].shape == (n_datasets, n_subjects, n_condition_cells)`.
+- Broadcast lower-dimensional basis parameters to full condition cells when
+  saving subject truth so truth arrays align with `sim["data"]`.
+- Broadcast lower-dimensional basis parameters into simulator calls. For
+  example, with full cells `A1:B1`, `A1:B2`, `A2:B1`, and `A2:B2`, an
+  `a ~ A` effect passes `a_A1` to both `A1` cells and `a_A2` to both `A2`
+  cells.
+- Different parameters may use different bases.
+
+### 7. Summary Network
+
+- Add a small `MultiConditionSummary` wrapper instead of pre-flattening the
+  simulated data before BayesFlow sees it.
+- The first aggregate path takes data shaped
+  `batch x subjects x condition_cells x features`, flattens each subject's
+  condition-by-feature matrix in fixed condition order, and summarizes the
+  subject axis with `DeepSet`.
+- Keep the wrapper structure extensible for later trial and flexible designs:
+  future trial support can add a trial encoder before condition flattening, and
+  future flexible support can add subject or trial masks without changing the
+  public workflow contract.
+- Do not treat condition cells as exchangeable in the summary network.
+
+### 8. Posterior Sampling and Dataframe Conversion
+
+- Build on the 0.2.1 sampling contract. Public
+  `MultiConditionWorkflow.sample_group_posterior(...)` should return a
+  dictionary with raw group keys and public-scale keys, matching existing
+  workflows.
+- Extend `posterior_to_dataframe(...)` or a small companion helper so
+  multi-condition posterior dictionaries can be converted into tidy tables with
+  columns `dataset`, `draw`, `level`, `param`, `basis`, `quantity`, and
+  `value`.
+- Use `basis` to identify condition cells or effect bases such as `A1:B2`.
+- `value` is on the user-interpretable scale by default; raw-space values stay
+  opt-in through `include_raw=True`.
+- Represent correlation rows with `param="cor"`, `quantity="corr"`, and a
+  readable `basis` such as `drift_A1:B1__drift_A1:B2`.
+
+### 9. First Implementation Tests
+
+- First implementation tests should focus on contracts and simulation, not
+  BayesFlow training smoke tests or full documentation examples.
+- Add contract tests for `condition_factors(...)`, manual condition
+  normalization, `ConditionDesign`, and fixed cell-name ordering.
+- Add parser and validation tests for valid and invalid `effects` terms,
+  including unknown parameters, unknown factors, conflicting bases, duplicate
+  mergeable terms, and invalid `block` overlap.
+- Add LKJ tests for valid positive-definite correlation matrices and invalid
+  correlation prior strings.
+- Add simulation tests for `sim["data"]` shape, flat group truth keys, subject
+  truth shape, lower-dimensional basis broadcasting into simulator calls, and
+  the guarantee that simulators do not receive condition metadata.
+- Add dataframe schema tests for the explicit posterior conversion utility,
+  not for `sample_*` return values.
+
+## Future Backlog: New Features and Research Prototypes
+
+These items are intentionally deferred beyond the focused 0.3.0
+`MultiConditionWorkflow` milestone.
 
 ### 1. Reorganize Parameter API Ownership
 

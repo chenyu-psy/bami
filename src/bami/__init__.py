@@ -8,7 +8,10 @@ The package is organized by responsibility:
 - evaluation: reusable plotting and metric contracts for model assessment
 - data_ops: tabular data transformation helpers
 - data_shapes: future data-shape validation and padding helpers
+- utils: general user-facing utility helpers
 """
+
+from bami.utils import posterior_to_dataframe
 
 __all__ = [
     "workflows",
@@ -18,4 +21,6 @@ __all__ = [
     "evaluation",
     "data_ops",
     "data_shapes",
+    "utils",
+    "posterior_to_dataframe",
 ]

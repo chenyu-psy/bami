@@ -29,6 +29,7 @@ nav:
           - M3: api/simulators/m3.md
       - Parameters:
           - Population and individual parameters: api/parameters.md
+      - Utilities: api/utils.md
       - Evaluation:
           - Metrics: api/evaluation/metrics.md
           - Diagnostics: api/evaluation/diagnostics.md

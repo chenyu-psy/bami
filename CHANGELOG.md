@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.1 - 2026-05-30
+
+### Added
+
+- Added `posterior_to_dataframe(...)` for converting posterior sample
+  dictionaries into tidy analysis tables.
+- Added documentation for posterior dataframe conversion utilities.
+
+### Changed
+
+- Kept workflow `sample_*` methods dictionary-based so raw posterior keys
+  remain available for downstream workflow steps.
+- Updated hierarchical workflows so `keep_subject_truth=None` saves all
+  stochastic subject-level truth, while `keep_subject_truth=[]` saves none.
+- Updated the development plan for the 0.2.1 sampling contract and the 0.3.0
+  `MultiConditionWorkflow` direction.
+
 ## 0.2.0 - 2026-05-30
 
 ### Changed

@@ -582,6 +582,8 @@ class HierarchicalWorkflow:
         trial designs.
     keep_subject_truth
         Subject-level parameter names to save as ``<param>_subj`` truth arrays.
+        Use ``None`` to save all stochastic subject-level parameters, or an
+        empty list to save none.
     raw_data_key
         Optional output key used to save untransformed simulator rows.
     row_transform
@@ -675,7 +677,7 @@ class HierarchicalWorkflow:
             if include_mask is None
             else bool(include_mask)
         )
-        self.keep_subject_truth = list(keep_subject_truth or [])
+        self.keep_subject_truth = self._resolve_keep_subject_truth(keep_subject_truth)
         self.raw_data_key = raw_data_key
         self.row_transform = row_transform
         self.trial_feature_scale = trial_feature_scale
@@ -706,6 +708,40 @@ class HierarchicalWorkflow:
         """
 
         return self._draw_group_prior_from_spec(self.priors, rng)
+
+    def _resolve_keep_subject_truth(
+        self,
+        keep_subject_truth: Sequence[str] | None,
+    ) -> list[str]:
+        """Return validated subject-level truth names to store.
+
+        Parameters
+        ----------
+        keep_subject_truth
+            ``None`` to store all stochastic subject-level parameters, an empty
+            sequence to store none, or a sequence of parameter names to store.
+
+        Returns
+        -------
+        list[str]
+            Parameter names that simulation should save as ``<param>_subj``.
+        """
+
+        stochastic_names = [
+            name for name, spec in self.priors.items() if isinstance(spec, dict)
+        ]
+        if keep_subject_truth is None:
+            return stochastic_names
+
+        names = list(keep_subject_truth)
+        missing = [name for name in names if name not in stochastic_names]
+        if missing:
+            raise ValueError(
+                "keep_subject_truth contains parameters that are not stochastic "
+                f"subject-level prior keys: {missing}. Available parameters: "
+                f"{stochastic_names}"
+            )
+        return names
 
     def _draw_independent_subject_params(
         self,
