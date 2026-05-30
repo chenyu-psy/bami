@@ -87,26 +87,42 @@ Completed for the current simple SDM and hierarchical ezDM examples.
 
 ### 6. Run Checks and Record Remaining Gaps
 
-- Run tests, lint, format checks, and the website build.
-- Record any remaining failures as concrete follow-up tasks with the exact
-  command that failed.
+- Current checks pass for the latest code and documentation review:
+  `uv run pytest`, `uv run ruff check .`, `uv run black --check .`, and
+  `uv run mkdocs build`.
+- `uv run mkdocs build` prints the upstream Material for MkDocs 2.0 warning,
+  but the site still builds successfully.
+- Record future failures as concrete follow-up tasks with the exact command
+  that failed.
 - Keep unresolved issues separate from next-milestone feature ideas.
 
 ### 7. Review Runtime Compatibility and Defaults
 
-- Check package behavior on common researcher systems: macOS, Linux, and
-  Windows where feasible.
-- Check whether users can choose an appropriate computation backend or device
-  without editing package internals.
-- Review backend/device documentation so CPU-only users, Apple Silicon users,
-  and GPU users know what to expect.
-- Audit default training settings for low-performance laptops and CPU-only
-  environments. Defaults should be safe and teachable, even if advanced users
-  later increase epochs, batch sizes, or worker counts.
-- Add small smoke tests or documented manual checks for backend/device setup
-  when full cross-platform CI is not available.
-- Record any unsupported platform, backend, or device limitation explicitly in
-  the docs instead of leaving users to infer it from errors.
+- Runtime defaults have been reviewed and updated. `train_workflow(...)` now
+  defaults to `initial_epochs=5`, `n_batch=2000`, `workers=1`, and
+  `max_queue_size=4`, while preserving `max_epochs=100`, `batch_size=32`,
+  `validation_data=200`, `patience=5`, and `min_delta=0.1`.
+- `SimpleWorkflow.train_workflow(...)`, `HierarchicalWorkflow.train_workflow(...)`,
+  and inherited random-workflow training settings now share the same defaults.
+- Workflow documentation now explains which training arguments mainly affect
+  total computation, memory use, validation stability, and concurrent
+  simulation/prefetching.
+- Backend/device support is now documented explicitly: current `bami` workflows
+  use the BayesFlow/Keras Torch backend, and `torch_device` controls only Torch
+  device selection. TensorFlow and JAX backends are not part of the current
+  tested workflow contract.
+- Static cross-platform portability audit has been recorded instead of
+  requiring real macOS/Linux/Windows hardware runs. The audit checked for
+  hard-coded absolute user paths, OS-specific shell commands, platform-specific
+  Python branches, multiprocessing/fork assumptions, and Torch device
+  assumptions.
+- The current audit found no macOS-only runtime dependency. `mps` is checked
+  only when users explicitly request `torch_device="mps"`, and unavailable
+  accelerators fall back to CPU. The Torch backend is an intentional current
+  support boundary rather than an accidental platform dependency.
+- `configure_torch_device(...)` now validates device names before calling
+  Torch, so unsupported values such as `"gpu"` produce a bami-level error that
+  explains the supported Torch device choices.
 
 ## Current Milestone Acceptance Criteria
 
@@ -129,16 +145,8 @@ Completed for the current simple SDM and hierarchical ezDM examples.
 
 ## Current Milestone Remaining Gaps
 
-- Run or document cross-platform smoke checks for macOS, Linux, and Windows.
-- Review backend/device selection for BayesFlow/Keras/Torch and decide whether
-  `bami` needs a documented user-facing setting beyond current
-  `torch_device` training arguments.
-- Review whether default training values such as epochs, batches, batch size,
-  workers, and queue size are friendly to CPU-only and low-memory machines.
-- Add documentation that explains recommended settings for low-performance
-  laptops versus faster GPU machines.
-- Record any checks that cannot be run locally, including the exact command or
-  CI setup needed later.
+- Record future platform-specific findings here if users or CI expose behavior
+  that was not visible in the static portability audit.
 
 ## Next Milestone: New Features and Research Prototypes
 
