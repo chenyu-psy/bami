@@ -67,10 +67,5 @@ SDM_SPEC = {
         "c": {"mean": "normal(1, 0.35)", "sd": 0.15, "link": "log"},
         "kappa": {"mean": "normal(1.2, 0.35)", "sd": 0.15, "link": "log"},
     },
-    "trial_contract": {
-        "names": ["error_rad"],
-        "order": ["error_rad"],
-        "unit": "radians",
-        "range": "[-pi, pi]",
-    },
+    "obs_names": ["error"],
 }

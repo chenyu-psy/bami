@@ -97,7 +97,7 @@ model = SimpleWorkflow(
     },
     simulator=simulate_sdm_simple,
     observation="trial",
-    obs_names=["error_rad"],
+    obs_names=["error"],
     n_trials=25,
 )
 
@@ -191,7 +191,7 @@ obs_names = ["pc", "mrt", "vrt"]
 For trial-level SDM errors, this might be:
 
 ```python
-obs_names = ["error_rad"]
+obs_names = ["error"]
 ```
 
 ### Input format
