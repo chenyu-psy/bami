@@ -10,18 +10,16 @@ import os
 def configure_torch_device(device: str | None = None) -> str:
     """Set the Torch default device for BayesFlow/Keras training.
 
-    Parameters
-    ----------
-    device
-        Requested Torch device. Use ``"mps"`` on Apple Silicon, ``"cpu"`` for
-        CPU training, or ``None`` to leave the current default unchanged.
+    Args:
+        device: Requested Torch device. Use ``"mps"`` on Apple Silicon,
+            ``"cuda"`` on CUDA systems, ``"cpu"`` for CPU training, or ``None`` to
+            leave the current default unchanged.
 
-    Returns
-    -------
-    str
-        Device actually selected. Falls back to ``"cpu"`` when the requested
-        accelerator is unavailable. For available Apple Silicon MPS, PyTorch's
-        CPU fallback is enabled for operations that MPS does not implement.
+    Returns:
+        str: Device actually selected. Falls back to ``"cpu"`` when the
+            requested accelerator is unavailable. For available Apple Silicon MPS,
+            PyTorch's CPU fallback is enabled for operations that MPS does not
+            implement.
     """
 
     if device is None:

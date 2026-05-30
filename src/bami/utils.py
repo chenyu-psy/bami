@@ -34,38 +34,32 @@ def posterior_to_dataframe(
 ) -> pd.DataFrame:
     """Convert posterior sample dictionaries into a tidy dataframe.
 
-    Parameters
-    ----------
-    samples
-        Posterior sample dictionary returned by a ``sample_*`` workflow method.
-    priors
-        Workflow prior specification. Only stochastic parameters represented by
-        dictionaries are included, so constants do not become posterior rows.
-    level
-        Posterior level to convert. Use ``"simple"`` for simple-model samples,
-        ``"group"`` for hierarchical group samples, or ``"subject"`` for
-        random-effect subject samples. ``"random"`` is accepted as an alias for
-        ``"subject"``.
-    include_raw
-        Whether to include raw-space values such as ``theta_raw``,
-        ``theta_mu_raw``, ``theta_log_sigma``, ``theta_subj_raw``, and
-        standardized ``theta_z`` values. The default keeps only public-scale
-        values researchers usually interpret.
+    Use this when you want posterior draws in a table for plotting, summaries,
+    or export. The input stays dictionary-based in workflow methods because
+    that is the shape BayesFlow uses internally.
 
-    Returns
-    -------
-    pandas.DataFrame
-        Tidy posterior table with columns ``dataset``, ``draw``, ``level``,
-        ``param``, ``basis``, ``quantity``, and ``value``.
+    Args:
+        samples: Posterior sample dictionary returned by a ``sample_*``
+            workflow method.
+        priors: Workflow prior specification. Only stochastic parameters
+            represented by dictionaries are included, so constants do not become
+            posterior rows.
+        level: Posterior level to convert. Use ``"simple"``, ``"group"``, or
+            ``"subject"``. ``"random"`` is accepted as an alias for ``"subject"``.
+        include_raw: Whether to include raw-space values such as
+            ``theta_raw``, ``theta_mu_raw``, ``theta_log_sigma``,
+            ``theta_subj_raw``, and standardized ``theta_z`` values.
 
-    Examples
-    --------
-    >>> samples = {"theta": np.array([[0.1, 0.2]])}
-    >>> priors = {"theta": {"mean": 0, "sd": 1, "link": "identity"}}
-    >>> posterior_to_dataframe(samples, priors, level="simple")
-       dataset  draw   level  param   basis quantity  value
-    0        0     0  simple  theta  global    value    0.1
-    1        0     1  simple  theta  global    value    0.2
+    Returns:
+        pandas.DataFrame: Tidy posterior table with columns ``dataset``,
+            ``draw``, ``level``, ``param``, ``basis``, ``quantity``, and ``value``.
+
+    Example:
+        ```python
+        samples = {"theta": np.array([[0.1, 0.2]])}
+        priors = {"theta": {"mean": 0, "sd": 1, "link": "identity"}}
+        posterior_to_dataframe(samples, priors, level="simple")
+        ```
     """
 
     checked_level = _check_level(level)
@@ -82,15 +76,12 @@ def posterior_to_dataframe(
 def _check_level(level: str) -> str:
     """Return a normalized posterior level name.
 
-    Parameters
-    ----------
-    level
-        User-supplied level label.
+    Args:
+        level:
+            User-supplied level label.
 
-    Returns
-    -------
-    str
-        One of ``"simple"``, ``"group"``, or ``"subject"``.
+    Returns:
+        str: One of ``"simple"``, ``"group"``, or ``"subject"``.
     """
 
     if level == "random":
@@ -103,15 +94,12 @@ def _check_level(level: str) -> str:
 def _posterior_params(priors: Mapping) -> list[str]:
     """Return stochastic parameter names from a workflow prior specification.
 
-    Parameters
-    ----------
-    priors
-        Workflow prior specification.
+    Args:
+        priors:
+            Workflow prior specification.
 
-    Returns
-    -------
-    list[str]
-        Parameters represented by prior dictionaries.
+    Returns:
+        list[str]: Parameters represented by prior dictionaries.
     """
 
     return [name for name, spec in priors.items() if isinstance(spec, dict)]
@@ -120,17 +108,14 @@ def _posterior_params(priors: Mapping) -> list[str]:
 def _as_dataset_draw_array(values, key: str) -> np.ndarray:
     """Return values with explicit dataset and draw axes.
 
-    Parameters
-    ----------
-    values
-        Posterior sample values for one global parameter.
-    key
-        Sample dictionary key used in error messages.
+    Args:
+        values:
+            Posterior sample values for one global parameter.
+        key:
+            Sample dictionary key used in error messages.
 
-    Returns
-    -------
-    numpy.ndarray
-        Array with shape ``(n_datasets, n_draws)``.
+    Returns:
+        numpy.ndarray: Array with shape ``(n_datasets, n_draws)``.
     """
 
     arr = np.asarray(values, dtype=float)
@@ -153,19 +138,15 @@ def _add_global_rows(
 ) -> None:
     """Append global posterior rows to a row list.
 
-    Parameters
-    ----------
-    rows
-        Mutable row list being assembled for the output dataframe.
-    arr
-        Posterior array with shape ``(n_datasets, n_draws)``.
-    level, param, quantity
-        Row labels written to the tidy dataframe.
+    Args:
+        rows: Mutable row list being assembled for the output dataframe.
+        arr: Posterior array with shape ``(n_datasets, n_draws)``.
+        level: Posterior level label written to the tidy dataframe.
+        param: Parameter label written to the tidy dataframe.
+        quantity: Quantity label written to the tidy dataframe.
 
-    Returns
-    -------
-    None
-        Rows are appended in place.
+    Returns:
+        None: Rows are appended in place.
     """
 
     for dataset_id in range(arr.shape[0]):
@@ -192,21 +173,18 @@ def _add_simple_rows(
 ) -> None:
     """Append simple-workflow posterior rows.
 
-    Parameters
-    ----------
-    rows
-        Mutable row list being assembled for the output dataframe.
-    samples
-        Posterior sample dictionary from ``SimpleWorkflow.sample_posterior``.
-    priors
-        Simple workflow priors.
-    include_raw
-        Whether to include raw-space parameter rows.
+    Args:
+        rows:
+            Mutable row list being assembled for the output dataframe.
+        samples:
+            Posterior sample dictionary from ``SimpleWorkflow.sample_posterior``.
+        priors:
+            Simple workflow priors.
+        include_raw:
+            Whether to include raw-space parameter rows.
 
-    Returns
-    -------
-    None
-        Rows are appended in place.
+    Returns:
+        None: Rows are appended in place.
     """
 
     from bami.inference.priors import raw_key
@@ -242,22 +220,19 @@ def _add_group_rows(
 ) -> None:
     """Append hierarchical group posterior rows.
 
-    Parameters
-    ----------
-    rows
-        Mutable row list being assembled for the output dataframe.
-    samples
-        Posterior sample dictionary from
-        ``HierarchicalWorkflow.sample_group_posterior``.
-    priors
-        Hierarchical workflow priors.
-    include_raw
-        Whether to include raw group mean and log-sigma rows.
+    Args:
+        rows:
+            Mutable row list being assembled for the output dataframe.
+        samples:
+            Posterior sample dictionary from
+            ``HierarchicalWorkflow.sample_group_posterior``.
+        priors:
+            Hierarchical workflow priors.
+        include_raw:
+            Whether to include raw group mean and log-sigma rows.
 
-    Returns
-    -------
-    None
-        Rows are appended in place.
+    Returns:
+        None: Rows are appended in place.
     """
 
     from bami.inference.priors import log_sigma_key, mu_raw_key
@@ -294,17 +269,14 @@ def _add_group_rows(
 def _as_subject_array(values, key: str) -> np.ndarray:
     """Return subject posterior values with dataset, draw, and subject axes.
 
-    Parameters
-    ----------
-    values
-        Posterior sample values for one subject-level parameter.
-    key
-        Sample dictionary key used in error messages.
+    Args:
+        values:
+            Posterior sample values for one subject-level parameter.
+        key:
+            Sample dictionary key used in error messages.
 
-    Returns
-    -------
-    numpy.ndarray
-        Array with shape ``(n_datasets, n_draws, n_subjects)``.
+    Returns:
+        numpy.ndarray: Array with shape ``(n_datasets, n_draws, n_subjects)``.
     """
 
     arr = np.asarray(values, dtype=float)
@@ -324,22 +296,19 @@ def _add_subject_rows(
 ) -> None:
     """Append random-effect subject posterior rows.
 
-    Parameters
-    ----------
-    rows
-        Mutable row list being assembled for the output dataframe.
-    samples
-        Posterior sample dictionary from
-        ``HierarchicalWorkflow.sample_random_posterior``.
-    priors
-        Hierarchical workflow priors.
-    include_raw
-        Whether to include raw subject and standardized z rows.
+    Args:
+        rows:
+            Mutable row list being assembled for the output dataframe.
+        samples:
+            Posterior sample dictionary from
+            ``HierarchicalWorkflow.sample_random_posterior``.
+        priors:
+            Hierarchical workflow priors.
+        include_raw:
+            Whether to include raw subject and standardized z rows.
 
-    Returns
-    -------
-    None
-        Rows are appended in place.
+    Returns:
+        None: Rows are appended in place.
     """
 
     for param in _posterior_params(priors):
@@ -373,19 +342,14 @@ def _add_subject_param_rows(
 ) -> None:
     """Append rows for one subject-level parameter array.
 
-    Parameters
-    ----------
-    rows
-        Mutable row list being assembled for the output dataframe.
-    arr
-        Posterior array with shape ``(n_datasets, n_draws, n_subjects)``.
-    param, quantity
-        Row labels written to the tidy dataframe.
+    Args:
+        rows: Mutable row list being assembled for the output dataframe.
+        arr: Posterior array with shape ``(n_datasets, n_draws, n_subjects)``.
+        param: Parameter label written to the tidy dataframe.
+        quantity: Quantity label written to the tidy dataframe.
 
-    Returns
-    -------
-    None
-        Rows are appended in place.
+    Returns:
+        None: Rows are appended in place.
     """
 
     for dataset_id in range(arr.shape[0]):

@@ -12,15 +12,11 @@ import numpy as np
 def circular_moments_from_errors(errors_rad: np.ndarray) -> np.ndarray:
     """Compute the first two circular moments for radian errors.
 
-    Parameters
-    ----------
-    errors_rad
-        Trial-level signed circular errors in radians.
+    Args:
+        errors_rad: Trial-level signed circular errors in radians.
 
-    Returns
-    -------
-    numpy.ndarray
-        Float32 vector ``[C1, S1, C2, S2]``.
+    Returns:
+        numpy.ndarray: Float32 vector ``[C1, S1, C2, S2]``.
     """
 
     errors = _as_error_radians(errors_rad)
@@ -34,15 +30,12 @@ def circular_moments_from_errors(errors_rad: np.ndarray) -> np.ndarray:
 def _as_error_radians(errors_rad: np.ndarray) -> np.ndarray:
     """Return finite, non-empty response errors in radians.
 
-    Parameters
-    ----------
-    errors_rad
-        Trial-level signed circular errors in radians.
+    Args:
+        errors_rad:
+            Trial-level signed circular errors in radians.
 
-    Returns
-    -------
-    numpy.ndarray
-        One-dimensional float array in radians.
+    Returns:
+        numpy.ndarray: One-dimensional float array in radians.
     """
 
     errors = np.asarray(errors_rad, dtype=float).reshape(-1)
@@ -56,15 +49,11 @@ def _as_error_radians(errors_rad: np.ndarray) -> np.ndarray:
 def check_n_trials(n_trials: int) -> int:
     """Validate a positive trial count.
 
-    Parameters
-    ----------
-    n_trials
-        Candidate trial count.
+    Args:
+        n_trials: Candidate trial count.
 
-    Returns
-    -------
-    int
-        Positive integer trial count.
+    Returns:
+        int: Positive integer trial count.
     """
 
     checked = int(n_trials)
