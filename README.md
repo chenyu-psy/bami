@@ -1,52 +1,35 @@
 # bami
 
-`bami` helps researchers build Bayesian amortized model inference workflows
-with [BayesFlow](https://bayesflow.org/). It is meant for research projects
-where you already have a model simulator and want a reusable workflow for
-simulation, training, posterior sampling, and recovery checks.
+`bami` provides reusable [BayesFlow](https://bayesflow.org/) workflows for
+simulator-based Bayesian amortized model inference.
 
-The package is organized around a simple idea:
+Use `bami` when you already have a simulator and want a consistent workflow for
+simulation, training, posterior sampling, and diagnostic checks. The package
+keeps the main modeling choices explicit: parameters, priors, observation
+format, trial-count design, and whether the workflow is simple or hierarchical.
 
-1. Write or choose a simulator that turns model parameters into data.
-2. Describe the priors for those parameters.
-3. Build a `SimpleWorkflow` or `HierarchicalWorkflow`.
-4. Train the workflow, sample from the posterior, and check recovery.
-
-## Who this is for
-
-Use `bami` if you are fitting cognitive or behavioral models with simulated
-data and want to avoid rewriting the same BayesFlow setup code for each model.
-The package is written for psychology researchers, so the public API keeps the
-main modeling decisions visible:
-
-- which parameters are inferred
-- what prior each parameter uses
-- whether observations are aggregate summaries or trial-level rows
-- whether datasets have a fixed or varying number of trials
-- whether the model is simple or hierarchical
-
-`bami` is not a full modeling language. You still provide the scientific model
-through a simulator function.
+`bami` is not a full modeling language. You provide the scientific simulator;
+`bami` provides the workflow around it.
 
 ## Installation
 
-With `uv`:
-
-```bash
-uv add "bami @ git+https://github.com/chenyu-psy/bami.git"
-```
-
-With `pip`:
+Install from GitHub with `pip`:
 
 ```bash
 pip install "bami @ git+https://github.com/chenyu-psy/bami.git"
 ```
 
-## Quick start: a simple SDM workflow
+If your project uses `uv`, add it with:
 
-The example below builds a standard SDM workflow for trial-level circular
-errors. The simulator returns one signed radian error per trial. The workflow
-then learns to infer the SDM parameters `c` and `kappa` from those trial rows.
+```bash
+uv add "bami @ git+https://github.com/chenyu-psy/bami.git"
+```
+
+## Quick Start
+
+This minimal example builds a simple SDM workflow and simulates four datasets.
+The SDM simulator is included as an example model; the same workflow structure
+can be used with your own simulator.
 
 ```python
 from bami.simulators import simulate_sdm_simple
@@ -66,233 +49,25 @@ model = SimpleWorkflow(
     n_trials=25,
 )
 
-simulated = model.simulate(4)
-print(simulated["data"].shape)
+sim = model.simulate(4)
+print(sim["data"].shape)
 ```
 
-Expected shape:
+Expected output:
 
 ```text
 (4, 25, 1)
 ```
 
-This means:
+## Full Documentation
 
-- `4` simulated datasets
-- `25` trial rows per dataset
-- `1` observation feature per trial: the signed circular error in radians
+Detailed guides and API references are available at
+[chenyu-psy.github.io/bami](https://chenyu-psy.github.io/bami/).
 
-## Core concepts
+Useful starting points:
 
-### Simulators
-
-A simulator is a regular Python function. For simple workflows, it should accept
-model parameters, `n_trials`, and `rng`.
-
-```python
-def simulator(param_a, param_b, n_trials, rng):
-    ...
-    return data_row
-```
-
-For `observation="aggregate"`, return one fixed-width row such as summary
-statistics, counts, or proportions.
-
-For `observation="trial"`, return one row per trial. This is useful when the
-trial sequence itself should be summarized by the neural network.
-
-For SDM trial-level workflows, `simulate_sdm_simple()` returns signed circular
-errors in radians. User-provided SDM data should use the same convention, with
-one trial row containing one error in `[-pi, pi]`.
-
-### Priors
-
-Priors use a compact dictionary format:
-
-```python
-priors = {
-    "a": {"mean": 0.0, "sd": 1.0, "link": "identity"},
-    "c": {"mean": "normal(0, 1)", "sd": "exponential(1)", "link": "identity"},
-}
-```
-
-Each dictionary-valued parameter becomes an inferred parameter. Scalar values
-are treated as fixed constants and are passed to the simulator but are not
-inferred.
-
-Common links are handled by `bami.inference.priors`. Use links to keep
-parameters on their valid scale while training in an unconstrained raw space.
-
-### Observation contracts
-
-The `observation` argument is required because it changes the shape of the data
-given to BayesFlow:
-
-- `observation="aggregate"`: one row per simulated dataset or subject
-- `observation="trial"`: one row per trial
-
-When trial count carries reliability information, use an input format to make
-that encoding explicit:
-
-```python
-from bami.inputs import aggregate_summary
-
-input_format = aggregate_summary(n_range=(50, 200))
-```
-
-This appends a scaled trial-count feature to aggregate rows.
-
-### Fixed and flexible trial counts
-
-Use `n_trials` for a fixed design:
-
-```python
-model = SimpleWorkflow(..., n_trials=100)
-```
-
-Use `n_trials_range` when the number of trials varies across simulated
-datasets:
-
-```python
-model = SimpleWorkflow(..., n_trials=None, n_trials_range=(50, 201))
-```
-
-The upper bound is exclusive. In this example, simulated trial counts can range
-from 50 to 200.
-
-## Main modules
-
-`bami.workflows`
-: `SimpleWorkflow` and `HierarchicalWorkflow`.
-
-`bami.inputs`
-: Input-format helpers for aggregate rows that encode trial count.
-
-`bami.simulators`
-: Reusable simulator helpers for existing model families, including EZ-diffusion
-and circular-response summary utilities.
-
-`bami.inference`
-: Prior drawing, parameter transforms, saved-workflow helpers, and runtime
-settings.
-
-`bami.evaluation`
-: Dataframe-first recovery metrics, summary helpers, and model diagnostic
-plots.
-
-`bami.data_ops` and `bami.data_shapes`
-: Small utilities for tabular data handling, validation, and padding.
-
-## Training and saved workflows
-
-After building a workflow, train through the model object:
-
-```python
-history = model.train_workflow(
-    max_epochs=100,
-    initial_epochs=20,
-    n_batch=200,
-    batch_size=64,
-    validation_data=64,
-    patience=10,
-    min_delta=0.001,
-    file="saved_workflows/sdm_workflow.keras",
-)
-```
-
-If the saved workflow file already exists, `train_workflow()` loads it by
-default instead of retraining. Use `overwrite=True` to force a new fit.
-
-## Evaluation workflow
-
-A typical analysis script uses this order:
-
-1. Build the workflow.
-2. Simulate validation or recovery datasets.
-3. Train or load the workflow.
-4. Sample posterior draws.
-5. Aggregate posterior draws or compute recovery metrics.
-
-The evaluation helpers return ordinary pandas data frames so they can be
-inspected, saved, or plotted with project-specific code.
-
-```python
-import pandas as pd
-
-from bami.evaluation import (
-    aggregate_data,
-    estimate_recovery,
-)
-
-simulated_values = pd.DataFrame(
-    {
-        "dataset_id": [0, 1],
-        "param": ["c", "c"],
-        "simulated_value": [0.8, 1.2],
-    }
-)
-estimated_values = pd.DataFrame(
-    {
-        "dataset_id": [0, 1],
-        "param": ["c", "c"],
-        "estimated_value": [0.9, 1.1],
-    }
-)
-value_summary = aggregate_data(
-    estimated_values,
-    variables="estimated_value",
-    group_by="param",
-)
-recovery_rows = estimate_recovery(
-    simulated_data=simulated_values,
-    estimated_data=estimated_values,
-    group_by="param",
-    metrics=["ccc", "rmse"],
-)
-```
-
-For one fitted model, use model-level diagnostic plots:
-
-```python
-fig = model.plot_parameter_recovery(
-    n_datasets=50,
-    num_samples=500,
-    metrics=["corr", "ccc"],
-)
-```
-
-## Development
-
-Run the test suite:
-
-```bash
-uv run pytest
-```
-
-Format code:
-
-```bash
-uv run black src tests
-```
-
-Lint code:
-
-```bash
-uv run ruff check src tests
-```
-
-## Design notes for contributors
-
-The package favors explicit, readable code over compact abstractions. Public
-functions should make modeling assumptions visible, especially data shape,
-parameter scale, trial-count handling, and whether values are on the raw or
-public scale.
-
-When adding a new model family, prefer this structure:
-
-1. Put reusable simulator code in `src/bami/simulators/`.
-2. Build workflows through `SimpleWorkflow` or `HierarchicalWorkflow`.
-3. Put recovery or analysis-specific orchestration in project scripts unless it
-is reusable across projects.
-4. Add focused tests that check data shapes, parameter names, and posterior
-transforms.
+- [Simple SDM workflow](https://chenyu-psy.github.io/bami/examples/simple-sdm/)
+- [Hierarchical ezDM workflow](https://chenyu-psy.github.io/bami/examples/hierarchical-ezdm/)
+- [Workflow reference](https://chenyu-psy.github.io/bami/api/workflows/)
+- [Evaluation metrics](https://chenyu-psy.github.io/bami/api/evaluation/metrics/)
+- [Diagnostic plots](https://chenyu-psy.github.io/bami/api/evaluation/diagnostics/)
