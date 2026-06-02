@@ -108,21 +108,22 @@ Completed for the current simple SDM and hierarchical ezDM examples.
   total computation, memory use, validation stability, and concurrent
   simulation/prefetching.
 - Backend/device support is now documented explicitly: current `bami` workflows
-  use the BayesFlow/Keras Torch backend, and `torch_device` controls only Torch
-  device selection. TensorFlow and JAX backends are not part of the current
-  tested workflow contract.
+  use the BayesFlow/Keras Torch backend, and device placement is a workflow-level
+  runtime setting through `device="cpu"`, `device="mps"`, or `device="cuda"`.
+  TensorFlow and JAX backends are not part of the current tested workflow
+  contract.
 - Static cross-platform portability audit has been recorded instead of
   requiring real macOS/Linux/Windows hardware runs. The audit checked for
   hard-coded absolute user paths, OS-specific shell commands, platform-specific
   Python branches, multiprocessing/fork assumptions, and Torch device
   assumptions.
-- The current audit found no macOS-only runtime dependency. `mps` is checked
-  only when users explicitly request `torch_device="mps"`, and unavailable
-  accelerators fall back to CPU. The Torch backend is an intentional current
+- The current audit found no macOS-only runtime dependency. CPU is the default
+  device across platforms, and `mps` or `cuda` are used only when users opt in
+  while constructing the workflow. The Torch backend is an intentional current
   support boundary rather than an accidental platform dependency.
-- `configure_torch_device(...)` now validates device names before calling
-  Torch, so unsupported values such as `"gpu"` produce a bami-level error that
-  explains the supported Torch device choices.
+- `validate_device(...)` now validates workflow device names before model
+  lifecycle calls, so unsupported values such as `"gpu"` produce a bami-level
+  error that explains the supported device choices.
 
 ## Current Milestone Acceptance Criteria
 
@@ -227,15 +228,15 @@ then debugs and validates the current package before new 0.3.0 features begin.
 - Do not start `MultiConditionWorkflow` implementation while compatibility bugs
   from this milestone remain unresolved.
 - Fixed Apple Silicon MPS training compatibility for BayesFlow/Keras Torch
-  workflows. When users request `torch_device="mps"` and MPS is available,
-  `configure_torch_device(...)` now enables PyTorch's CPU fallback for
+  workflows. When users construct a workflow with `device="mps"` and MPS is
+  available, `runtime_device(...)` now enables PyTorch's CPU fallback for
   unsupported MPS operations. This handles Keras orthogonal initializer QR
   operations such as `aten::linalg_qr.out`, while still selecting MPS for
   supported operations.
 - The fallback environment variable is initialized during `bami` package import
   so it is present before BayesFlow, Keras, or Torch initialize their backend.
-- Unavailable `mps` and `cuda` requests still fall back to CPU, but now print a
-  short user-facing message explaining the selected fallback device.
+- Unavailable `mps` and `cuda` requests fail during workflow construction so
+  users do not unknowingly train or sample on a different device than requested.
 - Optimized `HierarchicalWorkflow.sample_random_posterior(...)` for
   BayesFlow-Ind-style hierarchical random-effect recovery. The public method
   name and return contract are unchanged, but the implementation now delegates
@@ -271,8 +272,8 @@ then debugs and validates the current package before new 0.3.0 features begin.
   unavailable MPS fallback, unavailable CUDA fallback, explicit CPU selection,
   and invalid device-name errors.
 - Verified the MPS fallback path with a small Keras `Orthogonal()` initializer
-  smoke test after `configure_torch_device("mps")`; the initializer completed
-  with `PYTORCH_ENABLE_MPS_FALLBACK=1`.
+  smoke test under `runtime_device("mps")`; the initializer completed with
+  `PYTORCH_ENABLE_MPS_FALLBACK=1`.
 - Added regression coverage for the optimized random posterior route,
   including paired group draws, fixed group components, fixed and flexible
   trial data, ragged trial input, pre-padded masked trial input, and validation
@@ -298,10 +299,44 @@ then debugs and validates the current package before new 0.3.0 features begin.
 - Record any unresolved compatibility gap with exact reproduction steps before
   starting 0.3.0 work.
 
+## Milestone 0.2.3: Simple Workflow Summary-Network Cleanup
+
+This milestone addresses a user-facing warning in fixed-simple aggregate
+workflows before new 0.3.0 features begin.
+
+### 1. Singleton Aggregate Summary Warning
+
+- Fixed-simple aggregate workflows produce singleton summary data shaped
+  `batch x 1 x features`.
+- Current `SimpleWorkflow` uses `DeepSet` for all simple workflows.
+- BayesFlow/Keras can warn that softmax over a length-1 axis always returns 1.
+- The warning is benign for singleton aggregate data, but it is confusing
+  during ordinary notebook training, such as ezDM fixed-simple training.
+
+### 2. Intended Future Fix
+
+- Consider a dedicated single-row summary path for `SimpleWorkflow` when
+  `observation="aggregate"` and the workflow has fixed singleton rows.
+- Do not suppress the warning globally.
+- Preserve `DeepSet` for set-valued workflows, flexible trial workflows, and
+  hierarchical aggregate workflows.
+- Document saved-model compatibility implications if the architecture changes
+  and existing workflow files need retraining.
+
+### 3. Acceptance Criteria
+
+- ezDM fixed-simple training no longer emits the singleton softmax warning.
+- Existing simple trial, flex simple, and hierarchy workflow contracts remain
+  unchanged.
+- Saved-model compatibility implications are documented if architecture changes
+  require retraining.
+- Regression tests cover the selected summary network behavior.
+
 ## Milestone 0.3.0: MultiConditionWorkflow
 
-Start this milestone only after 0.2.1 workflow-wide API alignment and 0.2.2
-BayesFlow-Ind compatibility validation are complete.
+Start this milestone only after 0.2.1 workflow-wide API alignment, 0.2.2
+BayesFlow-Ind compatibility validation, and 0.2.3 summary-network cleanup are
+complete.
 
 This milestone adds `MultiConditionWorkflow` for aggregate multi-condition
 hierarchical models. The workflow is parallel to `HierarchicalWorkflow`, not an
