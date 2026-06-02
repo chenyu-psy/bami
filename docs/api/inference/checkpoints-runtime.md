@@ -1,8 +1,8 @@
 # Advanced saved workflows and runtime
 
 These helpers are mainly for long-running scripts that need explicit saved
-workflow files or device selection. Most examples call workflow methods
-directly and do not need these functions.
+workflow files. Most examples call workflow methods directly and do not need
+these functions.
 
 ## Checkpoints
 
@@ -18,15 +18,15 @@ directly and do not need these functions.
 
 ## Runtime
 
-`bami` currently uses the Torch backend for BayesFlow/Keras workflows.
-The `torch_device` training argument and `configure_torch_device(...)` helper
-only control Torch device selection. Use `None` to leave the current Torch
-default unchanged, or pass `"cpu"`, `"mps"`, or `"cuda"` when a script should
-request a specific Torch device.
+`bami` currently uses the Torch backend for BayesFlow/Keras workflows. Device
+placement is a workflow-level setting, not a training option. Construct
+workflows with `device="cpu"`, `device="mps"`, or `device="cuda"`. The default
+is `device="cpu"` because it is the most stable option across macOS, Linux,
+and Windows.
 
 TensorFlow and JAX backends are not part of the current tested `bami` workflow
 contract. Supporting those backends would require a separate compatibility
-review rather than just changing `torch_device`.
+review.
 
 ::: bami.inference.runtime
     options:
@@ -34,7 +34,8 @@ review rather than just changing `torch_device`.
       show_root_toc_entry: false
       heading_level: 3
       members:
-        - configure_torch_device
+        - validate_device
+        - runtime_device
 
 ## Examples
 
@@ -44,10 +45,7 @@ from bami.inference.checkpoints import (
     load_workflow_weights,
     save_workflow_weights,
 )
-from bami.inference.runtime import configure_torch_device
 
-
-device = configure_torch_device("cpu")
 
 # `model` is a configured and trained SimpleWorkflow or HierarchicalWorkflow.
 saved_file = save_workflow_weights(model, "saved_workflows/sdm.keras")

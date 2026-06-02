@@ -1,59 +1,91 @@
 """Runtime helpers for BayesFlow analysis workflows.
 
-The functions here keep training setup code outside model-family modules so
-generic workflows can be used directly from researcher-facing notebooks.
+The functions here keep backend device selection explicit. BayesFlow uses the
+Keras torch backend, so setting only PyTorch's default device is not enough:
+Keras also needs its own device context when workflows build, train, load, and
+sample.
 """
 
+from __future__ import annotations
+
+from collections.abc import Iterator
+from contextlib import contextmanager
 import os
 
+SUPPORTED_DEVICES = {"cpu", "mps", "cuda"}
 
-def configure_torch_device(device: str | None = None) -> str:
-    """Set the Torch default device for BayesFlow/Keras training.
+
+def validate_device(device: str | None) -> str:
+    """Return a supported workflow runtime device name.
 
     Args:
-        device: Requested Torch device. Use ``"mps"`` on Apple Silicon,
-            ``"cuda"`` on CUDA systems, ``"cpu"`` for CPU training, or ``None`` to
-            leave the current default unchanged.
+        device:
+            User-facing workflow device. ``None`` means the stable package
+            default, ``"cpu"``.
 
     Returns:
-        str: Device actually selected. Falls back to ``"cpu"`` when the
-            requested accelerator is unavailable. For available Apple Silicon MPS,
-            PyTorch's CPU fallback is enabled for operations that MPS does not
-            implement.
+        str: Normalized device name: ``"cpu"``, ``"mps"``, or ``"cuda"``.
+
+    Raises:
+        ValueError: If the device name is unsupported or the requested
+            accelerator is unavailable.
     """
 
     if device is None:
-        return "unchanged"
+        return "cpu"
 
-    requested = str(device).lower()
-    supported_devices = {"cpu", "mps", "cuda"}
-    if requested not in supported_devices:
-        raise ValueError(
-            "torch_device must be one of None, 'cpu', 'mps', or 'cuda'. "
-            "It controls the Torch device only; TensorFlow and JAX backends "
-            "are not part of the current bami workflow contract."
-        )
+    selected = str(device).lower()
+    if selected not in SUPPORTED_DEVICES:
+        raise ValueError("device must be one of 'cpu', 'mps', or 'cuda'.")
 
     try:
         import torch
-    except Exception:
-        return "unavailable"
+    except Exception as exc:
+        if selected == "cpu":
+            return selected
+        raise ValueError(f"device='{selected}' requires PyTorch.") from exc
 
-    selected = requested
-    if requested == "mps":
-        if not torch.backends.mps.is_available():
-            selected = "cpu"
-            print("Requested Torch device 'mps' is unavailable; using 'cpu'.")
-        else:
-            os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
-            print(
-                "Using Torch device 'mps' with CPU fallback for unsupported "
-                "MPS operations."
-            )
-    elif requested == "cuda":
-        if not torch.cuda.is_available():
-            selected = "cpu"
-            print("Requested Torch device 'cuda' is unavailable; using 'cpu'.")
+    if selected == "mps" and not torch.backends.mps.is_available():
+        raise ValueError("device='mps' was requested, but MPS is unavailable.")
+    if selected == "cuda" and not torch.cuda.is_available():
+        raise ValueError("device='cuda' was requested, but CUDA is unavailable.")
+
+    return selected
+
+
+@contextmanager
+def runtime_device(device: str | None) -> Iterator[str]:
+    """Run Keras torch backend work on one explicit workflow device.
+
+    Args:
+        device:
+            Workflow runtime device. ``None`` uses ``"cpu"``. The context sets
+            both Keras' backend device and PyTorch's default device for the
+            duration of the block, then restores the prior PyTorch default.
+
+    Yields:
+        str: Normalized selected device.
+    """
+
+    selected = validate_device(device)
+    if selected == "mps":
+        os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+
+    try:
+        import keras
+        import torch
+    except Exception:
+        yield selected
+        return
+
+    try:
+        previous_torch_device = torch.get_default_device()
+    except Exception:
+        previous_torch_device = "cpu"
 
     torch.set_default_device(selected)
-    return selected
+    try:
+        with keras.device(selected):
+            yield selected
+    finally:
+        torch.set_default_device(previous_torch_device)

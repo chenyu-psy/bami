@@ -7,11 +7,19 @@ format used by current model families.
 import re
 
 import numpy as np
-from scipy.stats import truncnorm
+from scipy.stats import norm, truncnorm
 
 MIN_POSITIVE_SCALE = 1e-8
+PROBABILITY_EPS = 1e-6
+SUPPORTED_LINKS = ("identity", "log", "logit", "softplus", "probit", "cloglog")
 DIST_PATTERN = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)\s*$")
 POSITIVE_SD_DISTS = {"uniform", "exponential", "gamma", "beta"}
+
+
+def _clip_probability(value):
+    """Keep probability-scale values inside the open interval ``(0, 1)``."""
+
+    return np.clip(value, PROBABILITY_EPS, 1 - PROBABILITY_EPS)
 
 
 def draw_prior(rng=None, **param_specs) -> dict:
@@ -459,8 +467,9 @@ def apply_link(value, link="identity") -> object:
 
     Args:
         value (float | numpy.ndarray | str): Raw value or array.
-        link (str | None): Link function name. Supported values are ``"identity"``,
-            ``"log"``, and ``"logit"``.
+        link (str | None): Link function name. Supported values are
+            ``"identity"``, ``"log"``, ``"logit"``, ``"softplus"``,
+            ``"probit"``, and ``"cloglog"``.
 
     Returns:
         float | numpy.ndarray: Transformed value on the public parameter
@@ -468,14 +477,23 @@ def apply_link(value, link="identity") -> object:
     """
 
     match link:
-        case "identity":
+        case None | "identity":
             pass
         case "log":
             value = np.exp(value)
         case "logit":
             value = 1 / (1 + np.exp(-value))
+        case "softplus":
+            value = np.logaddexp(0, value)
+        case "probit":
+            value = _clip_probability(norm.cdf(value))
+        case "cloglog":
+            value = _clip_probability(-np.expm1(-np.exp(value)))
         case _:
-            raise ValueError(f"Invalid link function '{link}'.")
+            raise ValueError(
+                f"Invalid link function '{link}'. Supported links are "
+                f"{SUPPORTED_LINKS}."
+            )
     return value
 
 
@@ -492,9 +510,22 @@ def invert_link(val, link) -> object:
 
     if link is None:
         return val
+    if link == "identity":
+        return val
     if link == "log":
         return np.log(np.maximum(val, 1e-8))
     if link == "logit":
-        val = np.clip(val, 1e-6, 1 - 1e-6)
+        val = _clip_probability(val)
         return np.log(val / (1.0 - val))
-    return val
+    if link == "softplus":
+        val = np.maximum(val, MIN_POSITIVE_SCALE)
+        return val + np.log1p(-np.exp(-val))
+    if link == "probit":
+        val = _clip_probability(val)
+        return norm.ppf(val)
+    if link == "cloglog":
+        val = _clip_probability(val)
+        return np.log(-np.log1p(-val))
+    raise ValueError(
+        f"Invalid link function '{link}'. Supported links are {SUPPORTED_LINKS}."
+    )

@@ -10,6 +10,8 @@ import os
 os.environ.setdefault("KERAS_BACKEND", "torch")
 import keras
 
+from bami.inference.runtime import runtime_device
+
 
 def save_workflow_weights(model, checkpoint_path: str | Path) -> Path:
     """Save trained workflow approximator to a `.keras` artifact.
@@ -24,7 +26,8 @@ def save_workflow_weights(model, checkpoint_path: str | Path) -> Path:
 
     ckpt_path = Path(checkpoint_path)
     ckpt_path.parent.mkdir(parents=True, exist_ok=True)
-    model.workflow.approximator.save(ckpt_path)
+    with runtime_device(getattr(model, "device", "cpu")):
+        model.workflow.approximator.save(ckpt_path)
     return ckpt_path
 
 
@@ -40,7 +43,8 @@ def load_workflow_weights(model, checkpoint_path: str | Path) -> object:
     """
 
     ckpt_path = Path(checkpoint_path)
-    model.workflow.approximator = keras.saving.load_model(ckpt_path)
+    with runtime_device(getattr(model, "device", "cpu")):
+        model.workflow.approximator = keras.saving.load_model(ckpt_path)
     return model
 
 

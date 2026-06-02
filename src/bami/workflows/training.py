@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from bami.inference.runtime import configure_torch_device
+from bami.inference.runtime import runtime_device
 
 TRAIN_CONFIG_DEFAULTS = {
     "max_epochs": 100,
@@ -21,7 +21,6 @@ TRAIN_CONFIG_DEFAULTS = {
     "min_delta": 0.1,
     "workers": 1,
     "max_queue_size": 4,
-    "torch_device": None,
     "verbose": 1,
     "fit_kwargs": {},
 }
@@ -38,7 +37,6 @@ def make_train_config(
     min_delta=0.1,
     workers=1,
     max_queue_size=4,
-    torch_device=None,
     verbose=1,
     fit_kwargs=None,
 ) -> dict:
@@ -56,7 +54,6 @@ def make_train_config(
         workers: Number of Keras data-loading workers.
         max_queue_size: Maximum queue length for prefetched simulation
             batches.
-        torch_device: Torch default device, such as ``"mps"`` or ``"cpu"``.
         verbose: Training log verbosity level passed to Keras.
         fit_kwargs: Optional keyword arguments passed to BayesFlow's
             ``fit_online``.
@@ -75,7 +72,6 @@ def make_train_config(
         "min_delta": min_delta,
         "workers": workers,
         "max_queue_size": max_queue_size,
-        "torch_device": torch_device,
         "verbose": verbose,
         "fit_kwargs": dict(fit_kwargs or {}),
     }
@@ -103,7 +99,6 @@ def train_workflow(
     min_delta=0.1,
     workers=1,
     max_queue_size=4,
-    torch_device=None,
     verbose=1,
     file=None,
     overwrite=False,
@@ -125,7 +120,6 @@ def train_workflow(
         workers: Number of Keras data-loading workers.
         max_queue_size: Maximum queue length for prefetched simulation
             batches.
-        torch_device: Torch default device, such as ``"mps"`` or ``"cpu"``.
         verbose: Training log verbosity level passed to Keras.
         file: Optional saved workflow file. Existing weights are loaded by
             default, and new weights are saved after fitting.
@@ -140,6 +134,12 @@ def train_workflow(
             is reused.
     """
 
+    if "torch_device" in kwargs:
+        raise TypeError(
+            "torch_device has been removed. Set device='cpu', 'mps', or 'cuda' "
+            "when constructing the workflow instead."
+        )
+
     config = make_train_config(
         max_epochs=max_epochs,
         initial_epochs=initial_epochs,
@@ -150,15 +150,10 @@ def train_workflow(
         min_delta=min_delta,
         workers=workers,
         max_queue_size=max_queue_size,
-        torch_device=torch_device,
         verbose=verbose,
         fit_kwargs=kwargs,
     )
     model._train_config = config
-
-    selected_device = configure_torch_device(torch_device)
-    if torch_device is not None:
-        print(f"Using Torch device for training: {selected_device}", flush=True)
 
     saved_workflow_path = None
     if file is not None:
@@ -166,7 +161,8 @@ def train_workflow(
         if saved_workflow_path.exists() and not overwrite:
             from bami.inference.checkpoints import load_workflow_weights
 
-            load_workflow_weights(model, saved_workflow_path)
+            with runtime_device(getattr(model, "device", "cpu")):
+                load_workflow_weights(model, saved_workflow_path)
             print(f"Loaded saved workflow: {saved_workflow_path}", flush=True)
             return {"loaded": True, "file": saved_workflow_path}
 
@@ -178,22 +174,24 @@ def train_workflow(
         "keep_optimizer": True,
     }
     fit_kwargs.update(kwargs)
-    history = _run_training_loop(
-        model,
-        max_epochs=max_epochs,
-        initial_epochs=initial_epochs,
-        n_batch=n_batch,
-        batch_size=batch_size,
-        validation_data=validation_data,
-        patience=patience,
-        min_delta=min_delta,
-        **fit_kwargs,
-    )
+    with runtime_device(getattr(model, "device", "cpu")):
+        history = _run_training_loop(
+            model,
+            max_epochs=max_epochs,
+            initial_epochs=initial_epochs,
+            n_batch=n_batch,
+            batch_size=batch_size,
+            validation_data=validation_data,
+            patience=patience,
+            min_delta=min_delta,
+            **fit_kwargs,
+        )
 
     if saved_workflow_path is not None:
         from bami.inference.checkpoints import save_workflow_weights
 
-        saved_path = save_workflow_weights(model, saved_workflow_path)
+        with runtime_device(getattr(model, "device", "cpu")):
+            saved_path = save_workflow_weights(model, saved_workflow_path)
         print(f"Saved workflow: {saved_path}", flush=True)
     return history
 
