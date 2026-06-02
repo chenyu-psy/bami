@@ -8,13 +8,16 @@ Trial observations use nested subject-by-trial rows for continuous data.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 import warnings
 
 import numpy as np
 import bayesflow as bf
 import keras
+import pandas as pd
 
 from bami.inputs import InputFormat
+from bami.inference.runtime import runtime_device, validate_device
 from bami.workflows import training
 from bami.workflows.contracts import validate_observation
 from bami.workflows.simple import SimpleWorkflow
@@ -38,6 +41,7 @@ class _RandomWorkflowTrainingAdapter:
 
         self.model = model
         self.workflow = model.random_workflow
+        self.device = getattr(model, "device", "cpu")
 
     def _resolve_validation_data(self, validation_data: int | dict) -> dict:
         """Return validation data from the parent random workflow.
@@ -378,6 +382,78 @@ MaskedSetEncoder = MaskedEquivariantSetEncoder
 
 
 @keras.saving.register_keras_serializable(package="bayesflow_ind")
+class MaskedAggregateSummary(bf.networks.SummaryNetwork):
+    """Summarize padded aggregate subject rows with an explicit mask.
+
+    Args:
+        summary_dim:
+            Width of the learned group summary.
+        include_count_features:
+            Whether to append active-subject count features after masked pooling.
+            Flexible aggregate hierarchies use this so the model can learn from
+            group size without treating padded rows as observed subjects.
+            **kwargs
+            Extra layer settings passed to the BayesFlow ``SummaryNetwork`` base.
+
+    Returns:
+        None: The initialized layer expects data shaped
+            ``(batch, subjects, features + 1)`` where the final feature is the
+            active-subject mask.
+    """
+
+    def __init__(
+        self,
+        summary_dim: int = 64,
+        include_count_features: bool = False,
+        **kwargs,
+    ):
+        """Create a subject-level masked aggregate summarizer."""
+
+        super().__init__(**kwargs)
+        self.summary_dim = int(summary_dim)
+        self.include_count_features = bool(include_count_features)
+        self.subject_encoder = MaskedEquivariantSetEncoder(
+            summary_dim=self.summary_dim,
+            include_count_features=self.include_count_features,
+        )
+
+    def call(self, x, training: bool = False, **kwargs):
+        """Encode active aggregate subject rows and ignore padded rows.
+
+        Args:
+            x:
+                Aggregate group data with shape ``batch x subjects x features``.
+                The final feature is the active-subject mask and is not treated
+                as an observed summary statistic.
+            training:
+                Whether the layer is being called during training.
+                **kwargs
+                Accepted for compatibility with BayesFlow summary-network calls.
+
+        Returns:
+            Tensor: Group-level summary with shape ``batch x summary_dim``.
+        """
+
+        del kwargs
+
+        values = x[..., :-1]
+        mask = x[..., -1]
+        return self.subject_encoder(values, mask, training=training)
+
+    def get_config(self) -> dict:
+        """Return Keras-serializable layer settings."""
+
+        config = super().get_config()
+        config.update(
+            {
+                "summary_dim": self.summary_dim,
+                "include_count_features": self.include_count_features,
+            }
+        )
+        return config
+
+
+@keras.saving.register_keras_serializable(package="bayesflow_ind")
 class MaskedNestedSummary(bf.networks.SummaryNetwork):
     """Summarize nested trial data with explicit padding masks.
 
@@ -528,7 +604,6 @@ class HierarchicalWorkflow:
             ``[low, high)``.
         include_trial_feature: Whether to append the subject trial count to
             each data row.
-        include_mask: Whether to append an active-subject mask.
         keep_subject_truth: Subject-level parameter names to save as
             ``<param>_subj`` truth arrays. Use ``None`` for all stochastic subject
             parameters, or ``[]`` for none.
@@ -541,6 +616,8 @@ class HierarchicalWorkflow:
         n_coupling_layers: Number of coupling layers in the inference
             network.
         transform_samples: Optional posterior transform function.
+        device: Workflow runtime device. CPU is the stable default; use
+            ``"mps"`` or ``"cuda"`` only when accelerator training is desired.
     """
 
     workflow_level = "hierarchical"
@@ -560,7 +637,6 @@ class HierarchicalWorkflow:
         n_trials: int | None = None,
         n_trials_range: Sequence[int] | None = None,
         include_trial_feature: bool = False,
-        include_mask: bool | None = None,
         keep_subject_truth: Sequence[str] | None = None,
         raw_data_key: str | None = None,
         row_transform: Callable | None = None,
@@ -569,7 +645,9 @@ class HierarchicalWorkflow:
         summary_dim: int = 64,
         n_coupling_layers: int = 10,
         transform_samples: Callable | None = None,
+        device: str | None = "cpu",
     ):
+        self.device = validate_device(device)
         self.model_name = self._check_name(name)
         self.priors = self._check_priors(priors)
         self.observation = validate_observation(observation, "HierarchicalWorkflow")
@@ -612,8 +690,6 @@ class HierarchicalWorkflow:
         self.include_trial_feature = bool(include_trial_feature)
         self.include_mask = (
             self.subject_design == "flex" and self.observation == "aggregate"
-            if include_mask is None
-            else bool(include_mask)
         )
         self.keep_subject_truth = self._resolve_keep_subject_truth(keep_subject_truth)
         self.raw_data_key = raw_data_key
@@ -626,8 +702,10 @@ class HierarchicalWorkflow:
         self.n_coupling_layers = int(n_coupling_layers)
         self._transform_samples = transform_samples
 
-        self._build_workflow()
+        with runtime_device(self.device):
+            self._build_workflow()
         self.random_workflow = None
+        self.random_estimator = None
         self.random_validation_data = None
         self.validation_data = None
 
@@ -1418,12 +1496,19 @@ class HierarchicalWorkflow:
         """Return feature names exposed on the BayesFlow workflow.
 
         Returns:
-            list[str]: Base observation names, plus the active-trial mask for flexible
-                nested trial data.
+            list[str]: Observation feature names, plus explicit design columns
+                appended by aggregate or trial workflows.
         """
 
         names = list(self.obs_names)
-        if self.observation == "trial" and self.trial_design == "flex":
+        if self.observation == "aggregate":
+            if self.input_format is not None and self.input_format.add_n:
+                names.append("n_trials")
+            elif self.include_trial_feature:
+                names.append("n_trials")
+            if self.include_mask:
+                names.append("active_subject")
+        elif self.trial_design == "flex":
             names.append("active_trial")
         return names
 
@@ -1431,11 +1516,17 @@ class HierarchicalWorkflow:
         """Build the BayesFlow summary network for this observation contract.
 
         Returns:
-            object: One DeepSet for aggregate subject rows, or a mask-aware nested
-                summary network for subject-by-trial rows.
+            object: A regular DeepSet for fixed aggregate subject rows, a
+                mask-aware aggregate summary for flexible aggregate rows, or a
+                mask-aware nested summary network for subject-by-trial rows.
         """
 
         if self.observation == "aggregate":
+            if self.include_mask:
+                return MaskedAggregateSummary(
+                    summary_dim=self.summary_dim,
+                    include_count_features=True,
+                )
             return bf.networks.DeepSet(summary_dim=self.summary_dim)
         return MaskedNestedSummary(
             summary_dim=self.summary_dim,
@@ -1485,7 +1576,8 @@ class HierarchicalWorkflow:
                 parameter truth arrays, and any saved subject-level truth arrays.
         """
 
-        return self.workflow.simulate(n_datasets)
+        with runtime_device(getattr(self, "device", "cpu")):
+            return self.workflow.simulate(n_datasets)
 
     def sample_group_posterior(
         self,
@@ -1516,13 +1608,14 @@ class HierarchicalWorkflow:
 
         from bami.workflows._sampling import _sample_posterior
 
-        return _sample_posterior(
-            workflow=self.workflow,
-            test_data=test_data,
-            num_samples=num_samples,
-            approximator_kwargs=approximator_kwargs,
-            sample_batch_size=sample_batch_size,
-        )
+        with runtime_device(getattr(self, "device", "cpu")):
+            return _sample_posterior(
+                workflow=self.workflow,
+                test_data=test_data,
+                num_samples=num_samples,
+                approximator_kwargs=approximator_kwargs,
+                sample_batch_size=sample_batch_size,
+            )
 
     def plot_population_recovery(
         self,
@@ -1531,7 +1624,9 @@ class HierarchicalWorkflow:
         params: str | Sequence[str] | None = None,
         metrics: str | Sequence[str] = "corr",
         n_cols: int = 3,
-        sample_batch_size: int = 100,
+        sample_batch_size: int = 10,
+        recovery_batch_size: int = 10,
+        show_progress: bool = True,
     ):
         """Plot group-level parameter recovery for this hierarchy.
 
@@ -1554,6 +1649,10 @@ class HierarchicalWorkflow:
             sample_batch_size: BayesFlow posterior sampling mini-batch size.
                 Larger values usually reduce sampling overhead; lower this
                 value if a diagnostic run exceeds available memory.
+            recovery_batch_size: Number of recovery datasets simulated and
+                sampled per chunk. Smaller values reduce peak memory use.
+            show_progress: Whether to show one BAMI progress bar while scoring
+                recovery datasets. BayesFlow's internal sampling output is hidden.
 
         Returns:
             matplotlib.figure.Figure: Population parameter recovery figure.
@@ -1561,15 +1660,18 @@ class HierarchicalWorkflow:
 
         from bami.evaluation.diagnostics import plot_population_recovery
 
-        return plot_population_recovery(
-            self,
-            n_datasets=n_datasets,
-            num_samples=num_samples,
-            params=params,
-            metrics=metrics,
-            n_cols=n_cols,
-            sample_batch_size=sample_batch_size,
-        )
+        with runtime_device(getattr(self, "device", "cpu")):
+            return plot_population_recovery(
+                self,
+                n_datasets=n_datasets,
+                num_samples=num_samples,
+                params=params,
+                metrics=metrics,
+                n_cols=n_cols,
+                sample_batch_size=sample_batch_size,
+                recovery_batch_size=recovery_batch_size,
+                show_progress=show_progress,
+            )
 
     def _group_sample_array(
         self,
@@ -2104,13 +2206,128 @@ class HierarchicalWorkflow:
 
         from bami.workflows._sampling import _sample_random_posterior
 
-        return _sample_random_posterior(
-            model=self,
-            observed_data=observed_data,
-            group_samples=group_samples,
-            approximator_kwargs=approximator_kwargs,
-            sample_batch_size=sample_batch_size,
+        with runtime_device(getattr(self, "device", "cpu")):
+            return _sample_random_posterior(
+                model=self,
+                observed_data=observed_data,
+                group_samples=group_samples,
+                approximator_kwargs=approximator_kwargs,
+                sample_batch_size=sample_batch_size,
+            )
+
+    def train_random_estimator(
+        self,
+        *,
+        file: str | Path | None = None,
+        overwrite: bool = False,
+        n_groups_per_sigma: int = 30,
+        subjects_per_group: int | None = None,
+        sigma_values: Sequence[float] | Mapping[str, Sequence[float]] | None = None,
+        validation_fraction: float = 0.2,
+        max_epochs: int = 100,
+        batch_size: int = 128,
+        patience: int = 10,
+        learning_rate: float = 1e-3,
+        loss: str = "mse",
+        corr_weight: float = 0.1,
+        hidden_width: int = 64,
+        show_progress: bool = True,
+        seed: int | None = None,
+    ) -> None:
+        """Train the deterministic subject-level random-effect estimator.
+
+        This is the Route C recovery head. It estimates subject-level
+        parameters from observed subject data and group raw parameters, but it
+        does not return posterior draws or calibrated uncertainty intervals.
+        Use the legacy ``train_random_workflow`` method when posterior draws are
+        required.
+
+        Args:
+            file: Optional ``.pt`` checkpoint. Existing checkpoints are loaded
+                when ``overwrite`` is false.
+            overwrite: Whether to retrain and replace an existing checkpoint.
+            n_groups_per_sigma: Simulated training groups per sigma value.
+            subjects_per_group: Simulated subjects per group. Defaults to this
+                workflow's maximum subject count from the model structure.
+            sigma_values: Sigma bins used for sigma-varying supervised
+                training. Use ``None`` to choose parameter-specific bins from
+                the group sigma prior. Use a sequence to share one grid across
+                parameters, or a dict for parameter-specific manual grids.
+            validation_fraction: Fraction of simulated groups held out for
+                early stopping.
+            max_epochs: Maximum PyTorch training epochs.
+            batch_size: Subject rows per training batch.
+            patience: Early-stopping patience in epochs.
+            learning_rate: Adam learning rate.
+            loss: ``"mse"`` or ``"mse_corr"``.
+            corr_weight: Weight for the optional correlation loss.
+            hidden_width: Width of the subject-row encoder.
+            show_progress: Whether to show estimator simulation and training
+                progress bars.
+            seed: Optional random seed. Defaults to a stable package seed.
+
+        Returns:
+            None: The trained or loaded estimator is stored on
+                ``self.random_estimator``. Use
+                ``estimate_random_parameter(...)`` to compute subject-level
+                estimates.
+        """
+
+        from bami.workflows.random_estimator import train_random_estimator
+
+        train_random_estimator(
+            self,
+            file=file,
+            overwrite=overwrite,
+            n_groups_per_sigma=n_groups_per_sigma,
+            subjects_per_group=subjects_per_group,
+            sigma_values=sigma_values,
+            validation_fraction=validation_fraction,
+            max_epochs=max_epochs,
+            batch_size=batch_size,
+            patience=patience,
+            learning_rate=learning_rate,
+            loss=loss,
+            corr_weight=corr_weight,
+            hidden_width=hidden_width,
+            show_progress=show_progress,
+            seed=seed,
         )
+        return None
+
+    def estimate_random_parameter(
+        self,
+        observed_data: Mapping | np.ndarray | Sequence,
+        group_samples: Mapping[str, np.ndarray],
+        *,
+        include_scales: bool = False,
+    ) -> pd.DataFrame:
+        """Estimate subject-level random parameters as deterministic values.
+
+        Args:
+            observed_data: One or more observed subjects using this workflow's
+                observation contract.
+            group_samples: Group posterior samples from
+                ``sample_group_posterior``. Raw group keys are averaged over
+                posterior draws before estimation.
+            include_scales: Whether to include raw, deviation, standardized
+                ``z``, and group raw columns. The default returns only public
+                parameter estimates plus dataset and subject ids.
+
+        Returns:
+            pandas.DataFrame: One row per active subject. These are point
+                estimates, not posterior samples.
+        """
+
+        from bami.workflows.random_estimator import estimate_random_parameter
+
+        with runtime_device(getattr(self, "device", "cpu")):
+            return estimate_random_parameter(
+                self,
+                observed_data=observed_data,
+                group_samples=group_samples,
+                include_scales=include_scales,
+            )
 
     def plot_random_recovery(
         self,
@@ -2119,34 +2336,35 @@ class HierarchicalWorkflow:
         params: str | Sequence[str] | None = None,
         metrics: str | Sequence[str] = "corr",
         n_cols: int = 3,
-        sample_batch_size: int = 100,
+        sample_batch_size: int = 10,
+        recovery_batch_size: int = 10,
         show_progress: bool = True,
     ):
         """Plot dataset-level random parameter recovery metrics.
 
-        The method simulates group datasets, samples group posteriors, samples
-        subject-level random effects, and plots one recovery metric per
-        simulated dataset and parameter. It requires ``keep_subject_truth`` so
-        the simulation contains subject-level true values.
+        The method simulates group datasets, samples group posteriors, estimates
+        subject-level random effects with ``estimate_random_parameter``, and
+        plots one recovery metric per simulated dataset and parameter. It
+        requires ``keep_subject_truth`` so the simulation contains subject-level
+        true values.
 
         Args:
             n_datasets: Number of simulated group datasets used for the
                 diagnostic plot.
-            num_samples: Number of paired group and random posterior draws
-                per simulated dataset.
+            num_samples: Number of group posterior draws per simulated dataset.
+                Subject-level random effects are estimated deterministically.
             params: Optional subject-level parameter name or names to plot,
                 such as ``"c"`` or ``"kappa"``. By default all saved subject-truth
                 parameters with posterior samples are shown.
             metrics: Metric name or names to plot. Supported values are
                 ``corr``, ``ccc``, and ``rmse``.
             n_cols: Maximum number of columns in the metric panel grid.
-            sample_batch_size: BayesFlow posterior sampling mini-batch size
-                used for group and random posterior draws inside this
-                diagnostic. Larger values usually reduce sampling overhead;
-                lower this value if a diagnostic run exceeds available memory.
-                The diagnostic still simulates and scores one recovery dataset
-                at a time.
-            show_progress: Whether to print dataset-level progress while the
+            sample_batch_size: BayesFlow group posterior sampling mini-batch
+                size.
+            recovery_batch_size: Number of recovery datasets simulated,
+                sampled, and estimated per chunk. Smaller values reduce peak
+                memory use.
+            show_progress: Whether to show one recovery progress bar while the
                 diagnostic runs.
 
         Returns:
@@ -2156,16 +2374,18 @@ class HierarchicalWorkflow:
 
         from bami.evaluation.diagnostics import plot_random_recovery
 
-        return plot_random_recovery(
-            self,
-            n_datasets=n_datasets,
-            num_samples=num_samples,
-            params=params,
-            metrics=metrics,
-            n_cols=n_cols,
-            sample_batch_size=sample_batch_size,
-            show_progress=show_progress,
-        )
+        with runtime_device(getattr(self, "device", "cpu")):
+            return plot_random_recovery(
+                self,
+                n_datasets=n_datasets,
+                num_samples=num_samples,
+                params=params,
+                metrics=metrics,
+                n_cols=n_cols,
+                sample_batch_size=sample_batch_size,
+                recovery_batch_size=recovery_batch_size,
+                show_progress=show_progress,
+            )
 
     def _prepare_observed_counts(self, counts) -> tuple[np.ndarray, list]:
         """Convert subject count rows to padded hierarchy summary data.
@@ -2252,7 +2472,8 @@ class HierarchicalWorkflow:
         """
 
         if self.random_workflow is None:
-            self._build_random_workflow()
+            with runtime_device(getattr(self, "device", "cpu")):
+                self._build_random_workflow()
         if isinstance(validation_data, int):
             if self.random_validation_data is None:
                 self.random_validation_data = self.random_workflow.simulate(
@@ -2313,7 +2534,6 @@ class HierarchicalWorkflow:
             min_delta=config_values["min_delta"],
             workers=config_values["workers"],
             max_queue_size=config_values["max_queue_size"],
-            torch_device=config_values["torch_device"],
             verbose=config_values["verbose"],
             fit_kwargs=inherited_fit_kwargs,
         )
@@ -2351,7 +2571,8 @@ class HierarchicalWorkflow:
         """
 
         if self.random_workflow is None:
-            self._build_random_workflow()
+            with runtime_device(getattr(self, "device", "cpu")):
+                self._build_random_workflow()
         config_keys = {
             key for key in training.TRAIN_CONFIG_DEFAULTS.keys() if key != "fit_kwargs"
         }
@@ -2369,23 +2590,23 @@ class HierarchicalWorkflow:
         )
         self._random_train_config = config
         trainer = _RandomWorkflowTrainingAdapter(self)
-        return training.train_workflow(
-            trainer,
-            max_epochs=config["max_epochs"],
-            initial_epochs=config["initial_epochs"],
-            n_batch=config["n_batch"],
-            batch_size=config["batch_size"],
-            validation_data=config["validation_data"],
-            patience=config["patience"],
-            min_delta=config["min_delta"],
-            workers=config["workers"],
-            max_queue_size=config["max_queue_size"],
-            torch_device=config["torch_device"],
-            verbose=config["verbose"],
-            file=file,
-            overwrite=overwrite,
-            **config["fit_kwargs"],
-        )
+        with runtime_device(getattr(self, "device", "cpu")):
+            return training.train_workflow(
+                trainer,
+                max_epochs=config["max_epochs"],
+                initial_epochs=config["initial_epochs"],
+                n_batch=config["n_batch"],
+                batch_size=config["batch_size"],
+                validation_data=config["validation_data"],
+                patience=config["patience"],
+                min_delta=config["min_delta"],
+                workers=config["workers"],
+                max_queue_size=config["max_queue_size"],
+                verbose=config["verbose"],
+                file=file,
+                overwrite=overwrite,
+                **config["fit_kwargs"],
+            )
 
     def train_workflow(
         self,
@@ -2398,7 +2619,6 @@ class HierarchicalWorkflow:
         min_delta=0.1,
         workers=1,
         max_queue_size=4,
-        torch_device=None,
         verbose=1,
         file=None,
         overwrite=False,
@@ -2420,8 +2640,6 @@ class HierarchicalWorkflow:
                 simulation batches.
             max_queue_size: Maximum queue length for prefetched simulation
                 batches.
-            torch_device: Torch default device to use during training, such
-                as ``"mps"`` or ``"cpu"``. Unavailable accelerators fall back to CPU.
             verbose: Training log verbosity level passed to Keras.
             file (str | pathlib.Path | None): Optional saved workflow file. Existing weights are loaded
                 by default, and new weights are saved after fitting.
@@ -2436,23 +2654,23 @@ class HierarchicalWorkflow:
                 file is reused.
         """
 
-        return training.train_workflow(
-            self,
-            max_epochs=max_epochs,
-            initial_epochs=initial_epochs,
-            n_batch=n_batch,
-            batch_size=batch_size,
-            validation_data=validation_data,
-            patience=patience,
-            min_delta=min_delta,
-            workers=workers,
-            max_queue_size=max_queue_size,
-            torch_device=torch_device,
-            verbose=verbose,
-            file=file,
-            overwrite=overwrite,
-            **kwargs,
-        )
+        with runtime_device(getattr(self, "device", "cpu")):
+            return training.train_workflow(
+                self,
+                max_epochs=max_epochs,
+                initial_epochs=initial_epochs,
+                n_batch=n_batch,
+                batch_size=batch_size,
+                validation_data=validation_data,
+                patience=patience,
+                min_delta=min_delta,
+                workers=workers,
+                max_queue_size=max_queue_size,
+                verbose=verbose,
+                file=file,
+                overwrite=overwrite,
+                **kwargs,
+            )
 
     def _resolve_validation_data(self, validation_data: int | dict) -> dict:
         """Return validation data for training.

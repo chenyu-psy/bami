@@ -15,6 +15,7 @@ import numpy as np
 import bayesflow as bf
 
 from bami.inputs import InputFormat
+from bami.inference.runtime import runtime_device, validate_device
 from bami.workflows import training
 from bami.workflows.contracts import validate_observation, validate_workflow_contract
 
@@ -56,6 +57,8 @@ class SimpleWorkflow:
             network.
         transform_samples: Optional posterior transform function. If omitted,
             raw samples are transformed with ``transform_simple_samples``.
+        device: Workflow runtime device. CPU is the stable default; use
+            ``"mps"`` or ``"cuda"`` only when accelerator training is desired.
     """
 
     workflow_level = "simple"
@@ -78,7 +81,9 @@ class SimpleWorkflow:
         summary_dim: int = 64,
         n_coupling_layers: int = 6,
         transform_samples: Callable | None = None,
+        device: str | None = "cpu",
     ):
+        self.device = validate_device(device)
         self.contract = self._resolve_contract(
             name=name,
             param_names=param_names,
@@ -111,7 +116,8 @@ class SimpleWorkflow:
         self.n_coupling_layers = int(n_coupling_layers)
         self._transform_samples = transform_samples
 
-        self._build_workflow()
+        with runtime_device(self.device):
+            self._build_workflow()
         self.validation_data = None
 
     @staticmethod
@@ -583,7 +589,8 @@ class SimpleWorkflow:
                 arrays using the workflow's data-shape contract.
         """
 
-        return self.workflow.simulate(n_datasets)
+        with runtime_device(getattr(self, "device", "cpu")):
+            return self.workflow.simulate(n_datasets)
 
     def sample_posterior(
         self,
@@ -613,13 +620,14 @@ class SimpleWorkflow:
 
         from bami.workflows._sampling import _sample_posterior
 
-        return _sample_posterior(
-            workflow=self.workflow,
-            test_data=test_data,
-            num_samples=num_samples,
-            approximator_kwargs=approximator_kwargs,
-            sample_batch_size=sample_batch_size,
-        )
+        with runtime_device(getattr(self, "device", "cpu")):
+            return _sample_posterior(
+                workflow=self.workflow,
+                test_data=test_data,
+                num_samples=num_samples,
+                approximator_kwargs=approximator_kwargs,
+                sample_batch_size=sample_batch_size,
+            )
 
     def plot_parameter_recovery(
         self,
@@ -628,7 +636,9 @@ class SimpleWorkflow:
         params: str | Sequence[str] | None = None,
         metrics: str | Sequence[str] = "corr",
         n_cols: int = 3,
-        sample_batch_size: int = 100,
+        sample_batch_size: int = 10,
+        recovery_batch_size: int = 10,
+        show_progress: bool = True,
     ):
         """Plot parameter recovery for this simple workflow.
 
@@ -650,6 +660,10 @@ class SimpleWorkflow:
             sample_batch_size: BayesFlow posterior sampling mini-batch size.
                 Larger values usually reduce sampling overhead; lower this
                 value if a diagnostic run exceeds available memory.
+            recovery_batch_size: Number of recovery datasets simulated and
+                sampled per chunk. Smaller values reduce peak memory use.
+            show_progress: Whether to show one BAMI progress bar while scoring
+                recovery datasets. BayesFlow's internal sampling output is hidden.
 
         Returns:
             matplotlib.figure.Figure: Parameter recovery figure.
@@ -657,15 +671,18 @@ class SimpleWorkflow:
 
         from bami.evaluation.diagnostics import plot_parameter_recovery
 
-        return plot_parameter_recovery(
-            self,
-            n_datasets=n_datasets,
-            num_samples=num_samples,
-            params=params,
-            metrics=metrics,
-            n_cols=n_cols,
-            sample_batch_size=sample_batch_size,
-        )
+        with runtime_device(getattr(self, "device", "cpu")):
+            return plot_parameter_recovery(
+                self,
+                n_datasets=n_datasets,
+                num_samples=num_samples,
+                params=params,
+                metrics=metrics,
+                n_cols=n_cols,
+                sample_batch_size=sample_batch_size,
+                recovery_batch_size=recovery_batch_size,
+                show_progress=show_progress,
+            )
 
     def train_workflow(
         self,
@@ -678,7 +695,6 @@ class SimpleWorkflow:
         min_delta=0.1,
         workers=1,
         max_queue_size=4,
-        torch_device=None,
         verbose=1,
         file=None,
         overwrite=False,
@@ -700,8 +716,6 @@ class SimpleWorkflow:
                 simulation batches.
             max_queue_size (int): Maximum queue length for prefetched simulation
                 batches.
-            torch_device (str | None): Torch default device to use during training, such
-                as ``"mps"`` or ``"cpu"``. Unavailable accelerators fall back to CPU.
             verbose (int): Training log verbosity level passed to Keras.
             file (str | pathlib.Path | None): Optional saved workflow file. Existing weights are loaded
                 by default, and new weights are saved after fitting.
@@ -716,23 +730,23 @@ class SimpleWorkflow:
                 file is reused.
         """
 
-        return training.train_workflow(
-            self,
-            max_epochs=max_epochs,
-            initial_epochs=initial_epochs,
-            n_batch=n_batch,
-            batch_size=batch_size,
-            validation_data=validation_data,
-            patience=patience,
-            min_delta=min_delta,
-            workers=workers,
-            max_queue_size=max_queue_size,
-            torch_device=torch_device,
-            verbose=verbose,
-            file=file,
-            overwrite=overwrite,
-            **kwargs,
-        )
+        with runtime_device(getattr(self, "device", "cpu")):
+            return training.train_workflow(
+                self,
+                max_epochs=max_epochs,
+                initial_epochs=initial_epochs,
+                n_batch=n_batch,
+                batch_size=batch_size,
+                validation_data=validation_data,
+                patience=patience,
+                min_delta=min_delta,
+                workers=workers,
+                max_queue_size=max_queue_size,
+                verbose=verbose,
+                file=file,
+                overwrite=overwrite,
+                **kwargs,
+            )
 
     def _resolve_validation_data(self, validation_data: int | dict) -> dict:
         """Return validation data for training.

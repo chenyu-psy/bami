@@ -9,19 +9,46 @@ or ``model.plot_random_recovery(...)`` on a workflow object.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
+import io
+import logging
 import math
 import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
+from tqdm.auto import tqdm
 
 from bami.evaluation.metrics import compute_ccc, compute_corr, compute_rmse
+from bami.inference.runtime import runtime_device
 
 VALID_RECOVERY_METRICS: tuple[str, ...] = ("corr", "ccc", "rmse")
 SCATTER_POINT_ALPHA = 0.6
 SCATTER_POINT_SIZE = 24.0
 RANDOM_POINT_ALPHA = 0.65
 RANDOM_POINT_SIZE = 24.0
+
+
+@contextmanager
+def _suppress_bayesflow_output():
+    """Temporarily hide BayesFlow sampling progress and info logs.
+
+    Args:
+        None
+
+    Returns:
+        None: Standard output, standard error, and the BayesFlow logger are
+        restored after the wrapped block.
+    """
+
+    logger = logging.getLogger("bayesflow")
+    old_disabled = logger.disabled
+    logger.disabled = True
+    try:
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            yield
+    finally:
+        logger.disabled = old_disabled
 
 
 def _as_param_list(params: str | Sequence[str] | None) -> list[str] | None:
@@ -133,6 +160,29 @@ def _finite_pairs(truth, estimate) -> tuple[np.ndarray, np.ndarray]:
     y = estimate_arr.reshape(-1)
     keep = np.isfinite(x) & np.isfinite(y)
     return x[keep], y[keep]
+
+
+def _combine_pair_parts(
+    pair_parts: Mapping[str, tuple[list[np.ndarray], list[np.ndarray]]],
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """Combine chunked recovery pairs into one plot-ready mapping.
+
+    Args:
+        pair_parts:
+            Mapping from parameter name to chunked truth and estimate vectors.
+
+    Returns:
+        dict[str, tuple[numpy.ndarray, numpy.ndarray]]: Concatenated recovery
+            pairs for plotting.
+    """
+
+    pairs = {}
+    for name, (truth_parts, estimate_parts) in pair_parts.items():
+        pairs[name] = (
+            np.concatenate(truth_parts) if truth_parts else np.array([]),
+            np.concatenate(estimate_parts) if estimate_parts else np.array([]),
+        )
+    return pairs
 
 
 def _compute_metric(metric: str, truth: np.ndarray, estimate: np.ndarray) -> float:
@@ -441,14 +491,14 @@ def _population_recovery_params(model, simulated_data, samples, params) -> list[
     return _select_available_params(available, params, label="population")
 
 
-def _random_recovery_params(model, simulated_data, samples, params) -> list[str]:
+def _random_recovery_params(model, simulated_data, estimates, params) -> list[str]:
     """Return subject-level parameter names available for recovery plotting.
 
     Args:
         model:
             ``HierarchicalWorkflow`` instance.
         simulated_data: Simulated truth dictionary.
-        samples: Random posterior sample dictionary.
+        estimates: Random estimator DataFrame.
         params:
             Optional requested parameter names.
 
@@ -466,7 +516,7 @@ def _random_recovery_params(model, simulated_data, samples, params) -> list[str]
     available = []
     for name in kept:
         truth_key = f"{name}_subj"
-        if truth_key in simulated_data and name in samples:
+        if truth_key in simulated_data and name in estimates.columns:
             available.append(name)
     return _select_available_params(available, params, label="random")
 
@@ -479,7 +529,9 @@ def plot_parameter_recovery(
     params: str | Sequence[str] | None = None,
     metrics: str | Sequence[str] = "corr",
     n_cols: int = 3,
-    sample_batch_size: int = 100,
+    sample_batch_size: int = 10,
+    recovery_batch_size: int = 10,
+    show_progress: bool = True,
 ) -> plt.Figure:
     """Simulate, sample, and plot simple-model parameter recovery.
 
@@ -503,6 +555,10 @@ def plot_parameter_recovery(
         sample_batch_size: BayesFlow posterior sampling mini-batch size. Larger
             values usually reduce sampling overhead; lower this value if a
             diagnostic run exceeds available memory.
+        recovery_batch_size: Number of recovery datasets simulated and sampled
+            in one chunk. Smaller values reduce peak memory use.
+        show_progress: Whether to show one BAMI progress bar while scoring
+            recovery datasets. BayesFlow's internal sampling output is hidden.
 
     Returns:
         matplotlib.figure.Figure: Recovery plot figure.
@@ -511,19 +567,52 @@ def plot_parameter_recovery(
     n_datasets = _check_positive_int(n_datasets, "n_datasets")
     num_samples = _check_positive_int(num_samples, "num_samples")
     sample_batch_size = _check_positive_int(sample_batch_size, "sample_batch_size")
-    metric_names = _as_metric_list(metrics)
-    simulated_data = model.simulate(n_datasets)
-    samples = model.sample_posterior(
-        test_data=simulated_data,
-        num_samples=num_samples,
-        sample_batch_size=sample_batch_size,
+    recovery_batch_size = _check_positive_int(
+        recovery_batch_size,
+        "recovery_batch_size",
     )
-    names = _simple_recovery_params(model, simulated_data, samples, params)
-    pairs = {}
-    for name in names:
-        pairs[name] = _finite_pairs(
-            simulated_data[name], _posterior_mean(samples, name)
-        )
+    metric_names = _as_metric_list(metrics)
+    pair_parts = {}
+    names = None
+    progress = tqdm(
+        total=n_datasets,
+        desc="Parameter recovery",
+        unit="dataset",
+        disable=not show_progress,
+    )
+    try:
+        dataset_offset = 0
+        with runtime_device(getattr(model, "device", "cpu")):
+            while dataset_offset < n_datasets:
+                batch_n = min(recovery_batch_size, n_datasets - dataset_offset)
+                simulated_data = model.simulate(batch_n)
+                with _suppress_bayesflow_output():
+                    samples = model.sample_posterior(
+                        test_data=simulated_data,
+                        num_samples=num_samples,
+                        sample_batch_size=sample_batch_size,
+                    )
+                batch_names = _simple_recovery_params(
+                    model, simulated_data, samples, params
+                )
+                if names is None:
+                    names = batch_names
+                    pair_parts = {name: ([], []) for name in names}
+                elif names != batch_names:
+                    raise ValueError(
+                        "Parameter recovery batches must expose the same parameter names."
+                    )
+                for name in names:
+                    x, y = _finite_pairs(
+                        simulated_data[name], _posterior_mean(samples, name)
+                    )
+                    pair_parts[name][0].append(x)
+                    pair_parts[name][1].append(y)
+                dataset_offset += batch_n
+                progress.update(batch_n)
+    finally:
+        progress.close()
+    pairs = _combine_pair_parts(pair_parts)
     return _plot_recovery_grid(
         pairs,
         metrics=metric_names,
@@ -539,7 +628,9 @@ def plot_population_recovery(
     params: str | Sequence[str] | None = None,
     metrics: str | Sequence[str] = "corr",
     n_cols: int = 3,
-    sample_batch_size: int = 100,
+    sample_batch_size: int = 10,
+    recovery_batch_size: int = 10,
+    show_progress: bool = True,
 ) -> plt.Figure:
     """Simulate, sample, and plot hierarchical population recovery.
 
@@ -562,6 +653,10 @@ def plot_population_recovery(
         sample_batch_size: BayesFlow posterior sampling mini-batch size. Larger
             values usually reduce sampling overhead; lower this value if a
             diagnostic run exceeds available memory.
+        recovery_batch_size: Number of recovery datasets simulated and sampled
+            in one chunk. Smaller values reduce peak memory use.
+        show_progress: Whether to show one BAMI progress bar while scoring
+            recovery datasets. BayesFlow's internal sampling output is hidden.
 
     Returns:
         matplotlib.figure.Figure: Recovery plot figure.
@@ -570,19 +665,55 @@ def plot_population_recovery(
     n_datasets = _check_positive_int(n_datasets, "n_datasets")
     num_samples = _check_positive_int(num_samples, "num_samples")
     sample_batch_size = _check_positive_int(sample_batch_size, "sample_batch_size")
-    metric_names = _as_metric_list(metrics)
-    simulated_data = model.simulate(n_datasets)
-    samples = model.sample_group_posterior(
-        test_data=simulated_data,
-        num_samples=num_samples,
-        sample_batch_size=sample_batch_size,
+    recovery_batch_size = _check_positive_int(
+        recovery_batch_size,
+        "recovery_batch_size",
     )
-    names = _population_recovery_params(model, simulated_data, samples, params)
-    pairs = {}
-    for name in names:
-        pairs[name] = _finite_pairs(
-            simulated_data[name], _posterior_mean(samples, name)
-        )
+    metric_names = _as_metric_list(metrics)
+    pair_parts = {}
+    names = None
+    progress = tqdm(
+        total=n_datasets,
+        desc="Population recovery",
+        unit="dataset",
+        disable=not show_progress,
+    )
+    try:
+        dataset_offset = 0
+        with runtime_device(getattr(model, "device", "cpu")):
+            while dataset_offset < n_datasets:
+                batch_n = min(recovery_batch_size, n_datasets - dataset_offset)
+                simulated_data = model.simulate(batch_n)
+                with _suppress_bayesflow_output():
+                    samples = model.sample_group_posterior(
+                        test_data=simulated_data,
+                        num_samples=num_samples,
+                        sample_batch_size=sample_batch_size,
+                    )
+                batch_names = _population_recovery_params(
+                    model,
+                    simulated_data,
+                    samples,
+                    params,
+                )
+                if names is None:
+                    names = batch_names
+                    pair_parts = {name: ([], []) for name in names}
+                elif names != batch_names:
+                    raise ValueError(
+                        "Population recovery batches must expose the same parameter names."
+                    )
+                for name in names:
+                    x, y = _finite_pairs(
+                        simulated_data[name], _posterior_mean(samples, name)
+                    )
+                    pair_parts[name][0].append(x)
+                    pair_parts[name][1].append(y)
+                dataset_offset += batch_n
+                progress.update(batch_n)
+    finally:
+        progress.close()
+    pairs = _combine_pair_parts(pair_parts)
     return _plot_recovery_grid(
         pairs,
         metrics=metric_names,
@@ -598,26 +729,27 @@ def plot_random_recovery(
     params: str | Sequence[str] | None = None,
     metrics: str | Sequence[str] = "corr",
     n_cols: int = 3,
-    sample_batch_size: int = 100,
+    sample_batch_size: int = 10,
+    recovery_batch_size: int = 10,
     show_progress: bool = True,
 ) -> plt.Figure:
     """Plot dataset-level random parameter recovery metrics.
 
-    This diagnostic simulates group datasets, samples group posteriors, samples
-    subject-level random effects, and computes one recovery metric per
-    simulated dataset and parameter. The model must save subject truth with
-    ``keep_subject_truth`` so the simulated ``<param>_subj`` values are
-    available for scoring.
+    This diagnostic simulates group datasets, samples group posteriors, estimates
+    subject-level random effects, and computes one recovery metric per simulated
+    dataset and parameter. The random estimator is deterministic and does not
+    return posterior draws. The model must save subject truth with
+    ``keep_subject_truth`` so the simulated ``<param>_subj`` values are available
+    for scoring.
 
     Args:
         model (HierarchicalWorkflow): ``HierarchicalWorkflow`` instance used to simulate group
-            datasets and sample paired group and random posteriors.
+            datasets, sample group posteriors, and estimate random effects.
         n_datasets: Number of simulated group datasets used for the
             diagnostic plot.
-        num_samples: Number of paired group and random posterior draws per
-            simulated dataset. The default is intentionally moderate because this
-            diagnostic reduces posterior draws to point estimates before computing
-            recovery metrics.
+        num_samples: Number of group posterior draws per simulated dataset.
+            Subject-level random effects are estimated deterministically from the
+            group posterior mean.
         params: Optional subject-level parameter name or names to plot, such
             as ``"c"`` or ``"kappa"``. By default all saved subject-truth parameters
             with posterior samples are shown.
@@ -625,14 +757,11 @@ def plot_random_recovery(
             ``corr``, ``ccc``, and ``rmse``. Each metric is shown in a separate
             panel.
         n_cols: Maximum number of columns in the metric panel grid.
-        sample_batch_size: BayesFlow posterior sampling mini-batch size used
-            inside this diagnostic. Larger values usually reduce sampling
-            overhead; lower this value if a diagnostic run exceeds available
-            memory. This does not change how many recovery datasets are
-            simulated; random recovery still processes one simulated dataset at
-            a time.
-        show_progress: Whether to print one dataset-level progress line
-            before each simulated recovery dataset is processed.
+        sample_batch_size: BayesFlow group posterior sampling mini-batch size.
+        recovery_batch_size: Number of recovery datasets simulated, sampled,
+            and estimated in one chunk. Smaller values reduce peak memory use.
+        show_progress: Whether to show one BAMI progress bar while scoring
+            recovery datasets. BayesFlow's internal sampling output is hidden.
 
     Returns:
         matplotlib.figure.Figure: Random recovery metric distribution figure.
@@ -641,46 +770,59 @@ def plot_random_recovery(
     n_datasets = _check_positive_int(n_datasets, "n_datasets")
     num_samples = _check_positive_int(num_samples, "num_samples")
     sample_batch_size = _check_positive_int(sample_batch_size, "sample_batch_size")
+    recovery_batch_size = _check_positive_int(
+        recovery_batch_size,
+        "recovery_batch_size",
+    )
     metric_names = _as_metric_list(metrics)
     rows = []
     names = None
-    for dataset_id in range(n_datasets):
-        if show_progress:
-            print(
-                f"Random recovery dataset {dataset_id + 1}/{n_datasets}",
-                flush=True,
-            )
-        simulated_data = model.simulate(1)
-        group_samples = model.sample_group_posterior(
-            test_data=simulated_data,
-            num_samples=num_samples,
-            sample_batch_size=sample_batch_size,
-        )
-        random_samples = model.sample_random_posterior(
-            observed_data=simulated_data,
-            group_samples=group_samples,
-            sample_batch_size=sample_batch_size,
-        )
-        batch_names = _random_recovery_params(
-            model,
-            simulated_data,
-            random_samples,
-            params,
-        )
-        if names is None:
-            names = batch_names
-        elif names != batch_names:
-            raise ValueError(
-                "Random recovery batches must expose the same parameter names."
-            )
-        _add_random_recovery_rows(
-            rows=rows,
-            simulated_data=simulated_data,
-            random_samples=random_samples,
-            names=names,
-            metrics=metric_names,
-            dataset_offset=dataset_id,
-        )
+    progress = tqdm(
+        total=n_datasets,
+        desc="Random recovery",
+        unit="dataset",
+        disable=not show_progress,
+    )
+    try:
+        dataset_offset = 0
+        with runtime_device(getattr(model, "device", "cpu")):
+            while dataset_offset < n_datasets:
+                batch_n = min(recovery_batch_size, n_datasets - dataset_offset)
+                simulated_data = model.simulate(batch_n)
+                with _suppress_bayesflow_output():
+                    group_samples = model.sample_group_posterior(
+                        test_data=simulated_data,
+                        num_samples=num_samples,
+                        sample_batch_size=sample_batch_size,
+                    )
+                estimates = model.estimate_random_parameter(
+                    observed_data=simulated_data,
+                    group_samples=group_samples,
+                )
+                batch_names = _random_recovery_params(
+                    model,
+                    simulated_data,
+                    estimates,
+                    params,
+                )
+                if names is None:
+                    names = batch_names
+                elif names != batch_names:
+                    raise ValueError(
+                        "Random recovery batches must expose the same parameter names."
+                    )
+                _add_random_recovery_rows(
+                    rows=rows,
+                    simulated_data=simulated_data,
+                    estimates=estimates,
+                    names=names,
+                    metrics=metric_names,
+                    dataset_offset=dataset_offset,
+                )
+                dataset_offset += batch_n
+                progress.update(batch_n)
+    finally:
+        progress.close()
     if names is None:
         names = []
     return _plot_random_metric_distribution(
@@ -714,7 +856,7 @@ def _add_random_recovery_rows(
     *,
     rows: list[dict],
     simulated_data: Mapping[str, np.ndarray],
-    random_samples: Mapping[str, np.ndarray],
+    estimates,
     names: Sequence[str],
     metrics: Sequence[str],
     dataset_offset: int,
@@ -726,8 +868,9 @@ def _add_random_recovery_rows(
             Mutable row list used by the final plotting helper.
         simulated_data:
             Simulated batch containing subject-level truth arrays.
-        random_samples:
-            Subject posterior samples for the same batch.
+        estimates:
+            DataFrame returned by ``estimate_random_parameter`` for the same
+            batch.
         names:
             Subject-level parameter names to score.
         metrics:
@@ -743,21 +886,19 @@ def _add_random_recovery_rows(
     for name in names:
         truth_key = f"{name}_subj"
         truth = np.asarray(simulated_data[truth_key], dtype=float)
-        estimate = _posterior_mean(random_samples, name)
-        if truth.ndim != 2 or estimate.ndim != 2:
+        if truth.ndim != 2:
             raise ValueError(
-                "plot_random_recovery expects subject truth and estimates with "
-                "shape (n_datasets, n_subjects)."
-            )
-        if truth.shape != estimate.shape:
-            raise ValueError(
-                "Simulated subject truth and posterior estimates must have "
-                "matching shapes."
+                "plot_random_recovery expects subject truth with shape "
+                "(n_datasets, n_subjects)."
             )
         for dataset_id in range(truth.shape[0]):
+            dataset_estimates = estimates[estimates["dataset_id"] == dataset_id]
+            dataset_estimates = dataset_estimates.sort_values("subject_id")
+            estimate_values = dataset_estimates[name].to_numpy(dtype=float)
+            truth_estimates = truth[dataset_id, : len(estimate_values)]
             truth_values, estimate_values = _finite_pairs(
-                truth[dataset_id],
-                estimate[dataset_id],
+                truth_estimates,
+                estimate_values,
             )
             for metric in metrics:
                 rows.append(

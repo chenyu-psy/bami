@@ -240,6 +240,43 @@ separately. By default it inherits the training settings saved by
 model.train_random_workflow(file="saved_workflows/my_random_workflow.keras")
 ```
 
+This legacy random workflow is a BayesFlow posterior workflow. Its
+`sample_random_posterior(...)` method returns posterior draws, but the current
+random-recovery diagnostic no longer depends on it.
+
+For deterministic subject-level recovery, use the Route C random estimator
+instead:
+
+```python
+model.train_random_estimator(file="saved_workflows/my_random_estimator.pt")
+estimates = model.estimate_random_parameter(
+    observed_data=simulated_or_observed_data,
+    group_samples=group_samples,
+)
+```
+
+The training call returns `None` and stores the trained or loaded estimator on
+`model.random_estimator`. Call `estimate_random_parameter(...)` to get point
+estimates in a `pandas.DataFrame`, not posterior draws. By default, the table
+contains only `dataset_id`, `subject_id`, and public parameter estimates. Use
+`include_scales=True` to add raw, group-centered deviation, and standardized
+z-scale columns for diagnostic work. `model.plot_random_recovery(...)` uses
+this estimator path. Do not use estimator output for posterior intervals or
+coverage checks.
+
+By default, `train_random_estimator(...)` uses `sigma_values=None`. This chooses
+parameter-specific low, mid, and high group-sigma values from the model's group
+sigma prior. A sequence such as `(0.05, 0.15, 0.45)` keeps the older behavior
+and shares one sigma grid across all hierarchical parameters. A dict can be
+used when a project needs manual parameter-specific grids, for example
+`{"c": (0.05, 0.15, 0.45), "kappa": (0.1, 0.3, 0.8)}`. All sigma grids use
+synchronized bins rather than Cartesian products.
+
+Random recovery diagnostics process datasets in chunks to keep memory use
+bounded. Use `recovery_batch_size` to control how many simulated recovery
+datasets are processed per chunk, and use `sample_batch_size` only for the
+group-posterior sampling mini-batch size.
+
 ### Adjusting training size
 
 The default training settings are intended to be a reasonable starting point
@@ -302,6 +339,18 @@ in notebook or cross-platform workflows.
       heading_level: 3
 
 ::: bami.workflows.hierarchical.HierarchicalWorkflow.sample_random_posterior
+    options:
+      show_root_heading: true
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: bami.workflows.hierarchical.HierarchicalWorkflow.train_random_estimator
+    options:
+      show_root_heading: true
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: bami.workflows.hierarchical.HierarchicalWorkflow.estimate_random_parameter
     options:
       show_root_heading: true
       show_root_toc_entry: false
