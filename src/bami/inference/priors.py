@@ -7,28 +7,31 @@ format used by current model families.
 import re
 
 import numpy as np
-from scipy.stats import truncnorm
+from scipy.stats import norm, truncnorm
 
 MIN_POSITIVE_SCALE = 1e-8
+PROBABILITY_EPS = 1e-6
+SUPPORTED_LINKS = ("identity", "log", "logit", "softplus", "probit", "cloglog")
 DIST_PATTERN = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)\s*$")
 POSITIVE_SD_DISTS = {"uniform", "exponential", "gamma", "beta"}
 
 
-def draw_prior(rng=None, **param_specs):
+def _clip_probability(value):
+    """Keep probability-scale values inside the open interval ``(0, 1)``."""
+
+    return np.clip(value, PROBABILITY_EPS, 1 - PROBABILITY_EPS)
+
+
+def draw_prior(rng=None, **param_specs) -> dict:
     """Draw public-scale parameter values from group prior specifications.
 
-    Parameters
-    ----------
-    rng : numpy.random.Generator, optional
-        Random number generator. Defaults to ``np.random``.
-    **param_specs : dict
-        Parameter specifications. A parameter can be a scalar constant or a
-        dictionary with ``mean``, ``sd``, and ``link``.
+    Args:
+        rng (numpy.random.Generator | None): Optional NumPy random generator. Defaults to ``np.random``.
+        **param_specs (Any): Parameter specifications. A parameter can be a scalar
+            constant or a dictionary with ``mean``, ``sd``, and ``link``.
 
-    Returns
-    -------
-    dict
-        Public-scale parameter dictionary.
+    Returns:
+        dict: Public-scale parameter dictionary.
     """
 
     if rng is None:
@@ -53,51 +56,86 @@ def draw_prior(rng=None, **param_specs):
 
 
 def raw_key(name: str) -> str:
-    """Return the raw-space inference key for a simple parameter."""
+    """Return the raw-space inference key for a simple parameter.
+
+    Args:
+        name: Public parameter name.
+
+    Returns:
+        str: Raw-space sample key.
+    """
 
     return f"{name}_raw"
 
 
 def mu_raw_key(name: str) -> str:
-    """Return the raw-space group-mean key for a hierarchical parameter."""
+    """Return the raw-space group-mean key for a hierarchical parameter.
+
+    Args:
+        name: Public parameter name.
+
+    Returns:
+        str: Raw-space group-mean sample key.
+    """
 
     return f"{name}_mu_raw"
 
 
 def log_sigma_key(name: str) -> str:
-    """Return the raw-space log-sigma key for a hierarchical parameter."""
+    """Return the raw-space log-sigma key for a hierarchical parameter.
+
+    Args:
+        name: Public parameter name.
+
+    Returns:
+        str: Raw-space log-SD sample key.
+    """
 
     return f"{name}_log_sigma"
 
 
 def subj_raw_key(name: str, subj: int) -> str:
-    """Return the raw-space subject key for a fixed subject slot."""
+    """Return the raw-space subject key for a fixed subject slot.
+
+    Args:
+        name: Public parameter name.
+        subj: Zero-based subject slot.
+
+    Returns:
+        str: Raw-space subject sample key.
+    """
 
     return f"{name}_subj_raw_{subj}"
 
 
 def subj_key(name: str, subj: int) -> str:
-    """Return the public subject key for a fixed subject slot."""
+    """Return the public subject key for a fixed subject slot.
+
+    Args:
+        name: Public parameter name.
+        subj: Zero-based subject slot.
+
+    Returns:
+        str: Public-scale subject sample key.
+    """
 
     return f"{name}_subj_{subj}"
 
 
-def draw_prior_with_raw(rng=None, **param_specs):
+def draw_prior_with_raw(rng=None, **param_specs) -> dict:
     """Draw simple-model parameters on raw and public scales.
 
-    Parameters
-    ----------
-    rng : numpy.random.Generator, optional
-        Random number generator.
-    **param_specs
-        Parameter prior specifications.
+    This is the simulator-side companion to posterior transforms: it keeps raw
+    inference values and researcher-facing public values in the same draw.
 
-    Returns
-    -------
-    dict
-        Public parameter values plus raw inference values. New-format specs
-        draw a group mean first and then one actual raw parameter from
-        ``Normal(group_mean, sd)``.
+    Args:
+        rng (numpy.random.Generator | None): Optional NumPy random generator. Defaults to ``np.random``.
+        **param_specs (Any): Parameter prior specifications.
+
+    Returns:
+        dict: Public parameter values plus raw inference values. New-format
+            specs draw a group mean first and then one actual raw parameter from
+            ``Normal(group_mean, sd)``.
     """
 
     if rng is None:
@@ -124,33 +162,71 @@ def draw_prior_with_raw(rng=None, **param_specs):
 
 
 def is_group_prior_spec(spec: dict) -> bool:
-    """Return whether a parameter uses the group-mean plus SD prior format."""
+    """Return whether a parameter uses the group-mean plus SD prior format.
+
+    Args:
+        spec: Candidate prior specification.
+
+    Returns:
+        bool: Whether ``spec`` defines both ``mean`` and ``sd``.
+    """
 
     return "mean" in spec and "sd" in spec
 
 
 def is_distribution_value(value) -> bool:
-    """Return whether a spec value is a distribution string."""
+    """Return whether a spec value is a distribution string.
+
+    Args:
+        value (float | numpy.ndarray | str): Candidate scalar or distribution expression.
+
+    Returns:
+        bool: Whether ``value`` matches the compact distribution-expression
+            syntax.
+    """
 
     return isinstance(value, str) and DIST_PATTERN.match(value) is not None
 
 
 def is_stochastic_mean(spec: dict) -> bool:
-    """Return whether the group mean should be an inferred variable."""
+    """Return whether the group mean should be an inferred variable.
+
+    Args:
+        spec: Prior specification containing ``mean`` and ``sd``.
+
+    Returns:
+        bool: Whether ``mean`` is a distribution expression rather than a
+            fixed number.
+    """
 
     _check_group_prior_spec("", spec)
     return is_distribution_value(spec.get("mean"))
 
 
 def is_stochastic_sd(spec: dict) -> bool:
-    """Return whether group SD should be an inferred variable."""
+    """Return whether group SD should be an inferred variable.
+
+    Args:
+        spec: Prior specification containing ``mean`` and ``sd``.
+
+    Returns:
+        bool: Whether ``sd`` is a distribution expression rather than a fixed
+            number.
+    """
 
     _check_group_prior_spec("", spec)
     return is_distribution_value(spec.get("sd"))
 
 
 def parse_distribution_expr(expr: str) -> tuple[str, list[float]]:
-    """Parse a compact distribution expression."""
+    """Parse a compact distribution expression such as ``normal(0, 1)``.
+
+    Args:
+        expr: Distribution expression with a name and numeric arguments.
+
+    Returns:
+        tuple[str, list[float]]: Distribution name and numeric argument list.
+    """
 
     match = DIST_PATTERN.match(expr)
     if match is None:
@@ -171,7 +247,15 @@ def parse_distribution_expr(expr: str) -> tuple[str, list[float]]:
 
 
 def draw_distribution_expr(expr: str, rng=None) -> float:
-    """Draw one value from a compact distribution expression."""
+    """Draw one value from a compact distribution expression.
+
+    Args:
+        expr: Distribution expression such as ``uniform(0, 1)``.
+        rng (numpy.random.Generator | None): Optional NumPy random generator. Defaults to ``np.random``.
+
+    Returns:
+        float: One sampled scalar value.
+    """
 
     if rng is None:
         rng = np.random
@@ -218,7 +302,16 @@ def _require_arg_count(expr: str, args: list[float], expected: int) -> None:
 
 
 def validate_positive_sd_spec(name: str, value) -> None:
-    """Validate a raw-space SD specification."""
+    """Validate a raw-space SD specification.
+
+    Args:
+        name: Parameter name used in error messages.
+        value (float | numpy.ndarray | str): Positive number or supported positive distribution expression.
+
+    Returns:
+        None: Raises ``ValueError`` when the SD specification can produce
+            non-positive values.
+    """
 
     if np.isscalar(value) and not isinstance(value, str):
         if float(value) <= 0:
@@ -257,7 +350,16 @@ def validate_positive_sd_spec(name: str, value) -> None:
 
 
 def draw_group_mean_raw(name: str, spec: dict, rng=None) -> float:
-    """Draw or return the raw-space group mean for a parameter."""
+    """Draw or return the raw-space group mean for a parameter.
+
+    Args:
+        name: Parameter name used in error messages.
+        spec: Prior specification containing ``mean`` and ``sd``.
+        rng (numpy.random.Generator | None): Optional NumPy random generator. Defaults to ``np.random``.
+
+    Returns:
+        float: Raw-space group mean.
+    """
 
     if rng is None:
         rng = np.random
@@ -274,7 +376,16 @@ def draw_group_mean_raw(name: str, spec: dict, rng=None) -> float:
 
 
 def draw_group_sd_raw(name: str, spec: dict, rng=None) -> float:
-    """Draw or return the positive raw-space SD for a parameter."""
+    """Draw or return the positive raw-space SD for a parameter.
+
+    Args:
+        name: Parameter name used in error messages.
+        spec: Prior specification containing ``mean`` and ``sd``.
+        rng (numpy.random.Generator | None): Optional NumPy random generator. Defaults to ``np.random``.
+
+    Returns:
+        float: Positive raw-space group standard deviation.
+    """
 
     if rng is None:
         rng = np.random
@@ -298,17 +409,13 @@ def _check_group_prior_spec(name: str, spec: dict) -> None:
 def transform_simple_samples(samples: dict, priors: dict) -> dict:
     """Add public-scale simple parameter samples from raw posterior samples.
 
-    Parameters
-    ----------
-    samples
-        Posterior sample dictionary from BayesFlow.
-    priors
-        Prior specification containing link functions.
+    Args:
+        samples: Posterior sample dictionary from BayesFlow.
+        priors: Prior specification containing link functions.
 
-    Returns
-    -------
-    dict
-        Copy of ``samples`` with public keys such as ``a`` and ``ra`` added.
+    Returns:
+        dict: Copy of ``samples`` with public keys such as ``a`` and ``ra``
+            added.
     """
 
     out = dict(samples)
@@ -324,18 +431,13 @@ def transform_simple_samples(samples: dict, priors: dict) -> dict:
 def transform_hierarchical_samples(samples: dict, priors: dict) -> dict:
     """Add public-scale hierarchical samples from raw posterior samples.
 
-    Parameters
-    ----------
-    samples
-        Posterior sample dictionary from BayesFlow.
-    priors
-        Prior specification containing link functions.
+    Args:
+        samples: Posterior sample dictionary from BayesFlow.
+        priors: Prior specification containing link functions.
 
-    Returns
-    -------
-    dict
-        Copy of ``samples`` with public keys such as ``a_mu``, ``a_sigma``,
-        and ``a_subj_0`` added when raw keys are present.
+    Returns:
+        dict: Copy of ``samples`` with public keys such as ``a_mu``,
+            ``a_sigma``, and ``a_subj_0`` added when raw keys are present.
     """
 
     out = dict(samples)
@@ -360,55 +462,70 @@ def transform_hierarchical_samples(samples: dict, priors: dict) -> dict:
     return out
 
 
-def apply_link(value, link="identity"):
+def apply_link(value, link="identity") -> object:
     """Apply link transformation to raw values.
 
-    Parameters
-    ----------
-    value : float | np.ndarray
-        Raw value.
-    link : str, optional
-        Link function name.
+    Args:
+        value (float | numpy.ndarray | str): Raw value or array.
+        link (str | None): Link function name. Supported values are
+            ``"identity"``, ``"log"``, ``"logit"``, ``"softplus"``,
+            ``"probit"``, and ``"cloglog"``.
 
-    Returns
-    -------
-    float | np.ndarray
-        Transformed value.
+    Returns:
+        float | numpy.ndarray: Transformed value on the public parameter
+            scale.
     """
 
     match link:
-        case "identity":
+        case None | "identity":
             pass
         case "log":
             value = np.exp(value)
         case "logit":
             value = 1 / (1 + np.exp(-value))
+        case "softplus":
+            value = np.logaddexp(0, value)
+        case "probit":
+            value = _clip_probability(norm.cdf(value))
+        case "cloglog":
+            value = _clip_probability(-np.expm1(-np.exp(value)))
         case _:
-            raise ValueError(f"Invalid link function '{link}'.")
+            raise ValueError(
+                f"Invalid link function '{link}'. Supported links are "
+                f"{SUPPORTED_LINKS}."
+            )
     return value
 
 
-def invert_link(val, link):
+def invert_link(val, link) -> object:
     """Map linked values back to raw parameter space.
 
-    Parameters
-    ----------
-    val : float | np.ndarray
-        Linked-space value.
-    link : str | None
-        Link function name.
+    Args:
+        val (float | numpy.ndarray): Public-scale value or array.
+        link (str | None): Link function name, or ``None`` for no transform.
 
-    Returns
-    -------
-    float | np.ndarray
-        Raw-space value.
+    Returns:
+        float | numpy.ndarray: Raw-space value.
     """
 
     if link is None:
         return val
+    if link == "identity":
+        return val
     if link == "log":
         return np.log(np.maximum(val, 1e-8))
     if link == "logit":
-        val = np.clip(val, 1e-6, 1 - 1e-6)
+        val = _clip_probability(val)
         return np.log(val / (1.0 - val))
-    return val
+    if link == "softplus":
+        val = np.maximum(val, MIN_POSITIVE_SCALE)
+        return val + np.log1p(-np.exp(-val))
+    if link == "probit":
+        val = _clip_probability(val)
+        return norm.ppf(val)
+    if link == "cloglog":
+        val = _clip_probability(val)
+        return np.log(-np.log1p(-val))
+    raise ValueError(
+        f"Invalid link function '{link}'. Supported links are {SUPPORTED_LINKS}."
+    )

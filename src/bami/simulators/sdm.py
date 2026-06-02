@@ -23,22 +23,16 @@ def simulate_sdm_simple(
 ) -> np.ndarray:
     """Simulate continuous trial-level SDM errors in radians.
 
-    Parameters
-    ----------
-    c, kappa
-        Public-scale SDM parameters. ``c`` controls activation strength and
-        ``kappa`` controls the concentration of the circular similarity kernel.
-    n_trials
-        Number of trial-level errors to simulate.
-    rng
-        Optional NumPy random generator. Defaults to ``np.random`` so existing
-        project-level seeding remains effective.
+    Args:
+        c: Public-scale SDM activation strength.
+        kappa: Public-scale concentration of the circular similarity kernel.
+        n_trials: Number of trial-level errors to simulate.
+        rng (numpy.random.Generator | None): Optional NumPy random generator. Defaults to ``np.random`` so
+            existing project-level seeding remains effective.
 
-    Returns
-    -------
-    numpy.ndarray
-        Trial-level signed circular errors in radians with shape
-        ``(n_trials, 1)``. Values lie in ``[-pi, pi]``.
+    Returns:
+        numpy.ndarray: Trial-level signed circular errors in radians with
+            shape ``(n_trials, 1)``. Values lie in ``[-pi, pi]``.
     """
 
     checked_c = _check_positive_float(c, "c")
@@ -58,19 +52,14 @@ def simulate_sdm_simple(
 def _sample_sdm_errors(c: float, kappa: float, n_trials: int, rng) -> np.ndarray:
     """Draw signed radian errors from the continuous SDM density.
 
-    Parameters
-    ----------
-    c, kappa
-        Validated public-scale SDM parameters.
-    n_trials
-        Number of errors to draw.
-    rng
-        NumPy-compatible random generator.
+    Args:
+        c: Validated SDM activation strength.
+        kappa: Validated SDM concentration parameter.
+        n_trials: Number of errors to draw.
+        rng: NumPy-compatible random generator.
 
-    Returns
-    -------
-    numpy.ndarray
-        One-dimensional array of signed radian errors.
+    Returns:
+        numpy.ndarray: One-dimensional array of signed radian errors.
     """
 
     support = np.linspace(-np.pi, np.pi, _SUPPORT_SIZE + 1)
@@ -88,18 +77,14 @@ def _sdm_density_unnormalized(
 ) -> np.ndarray:
     """Evaluate the unnormalized continuous SDM density.
 
-    Parameters
-    ----------
-    error_rad
-        Signed circular errors in radians.
-    c, kappa
-        Validated public-scale SDM parameters.
+    Args:
+        error_rad: Signed circular errors in radians.
+        c: Validated SDM activation strength.
+        kappa: Validated SDM concentration parameter.
 
-    Returns
-    -------
-    numpy.ndarray
-        Positive density values proportional to
-        ``exp(c * similarity(error_rad; kappa))``.
+    Returns:
+        numpy.ndarray: Positive density values proportional to
+            ``exp(c * similarity(error_rad; kappa))``.
     """
 
     activation = c * _von_mises_similarity(error_rad, kappa=kappa)
@@ -109,17 +94,14 @@ def _sdm_density_unnormalized(
 def _von_mises_similarity(error_rad: np.ndarray, kappa: float) -> np.ndarray:
     """Return SDM circular similarity for radian errors.
 
-    Parameters
-    ----------
-    error_rad
-        Signed circular errors in radians.
-    kappa
-        Concentration of the circular similarity kernel.
+    Args:
+        error_rad:
+            Signed circular errors in radians.
+        kappa:
+            Concentration of the circular similarity kernel.
 
-    Returns
-    -------
-    numpy.ndarray
-        Similarity values at each error.
+    Returns:
+        numpy.ndarray: Similarity values at each error.
     """
 
     return np.exp(kappa * np.cos(error_rad)) / (2.0 * np.pi * i0(kappa))
@@ -128,17 +110,14 @@ def _von_mises_similarity(error_rad: np.ndarray, kappa: float) -> np.ndarray:
 def _trapezoid_cdf(support: np.ndarray, density: np.ndarray) -> np.ndarray:
     """Return a cumulative distribution from sampled density values.
 
-    Parameters
-    ----------
-    support
-        Increasing radian support values.
-    density
-        Positive density values evaluated at ``support``.
+    Args:
+        support:
+            Increasing radian support values.
+        density:
+            Positive density values evaluated at ``support``.
 
-    Returns
-    -------
-    numpy.ndarray
-        Cumulative area values with the same length as ``support``.
+    Returns:
+        numpy.ndarray: Cumulative area values with the same length as ``support``.
     """
 
     widths = np.diff(support)
@@ -149,15 +128,12 @@ def _trapezoid_cdf(support: np.ndarray, density: np.ndarray) -> np.ndarray:
 def _wrap_radians(errors: np.ndarray) -> np.ndarray:
     """Wrap signed circular errors to ``[-pi, pi]``.
 
-    Parameters
-    ----------
-    errors
-        Radian error values.
+    Args:
+        errors:
+            Radian error values.
 
-    Returns
-    -------
-    numpy.ndarray
-        Wrapped radian errors.
+    Returns:
+        numpy.ndarray: Wrapped radian errors.
     """
 
     return ((errors + np.pi) % (2.0 * np.pi)) - np.pi
@@ -166,17 +142,14 @@ def _wrap_radians(errors: np.ndarray) -> np.ndarray:
 def _check_positive_float(value: float, name: str) -> float:
     """Return a positive finite floating-point value.
 
-    Parameters
-    ----------
-    value
-        Candidate numeric value.
-    name
-        Parameter name used in error messages.
+    Args:
+        value:
+            Candidate numeric value.
+        name:
+            Parameter name used in error messages.
 
-    Returns
-    -------
-    float
-        Positive finite value.
+    Returns:
+        float: Positive finite value.
     """
 
     checked = float(value)

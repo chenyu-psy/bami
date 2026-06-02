@@ -29,9 +29,9 @@ workflows. Model-specific helpers are documented on each simulator page.
 Use these functions after training when you want population-level or
 individual-level parameter estimates.
 
-[`model.sample_posterior`, `model.sample_group_posterior`, and `model.sample_random_posterior`](parameters.md)
-: Sample simple, group-level, or subject-level random-effect posterior draws
-and apply public-scale parameter transforms when available.
+[`SimpleWorkflow.sample_posterior`, `HierarchicalWorkflow.sample_group_posterior`, `HierarchicalWorkflow.train_random_estimator`, and `HierarchicalWorkflow.estimate_random_parameter`](parameters.md)
+: Sample simple and group-level posterior draws, then train and apply the
+subject-level random-effect estimator when individual estimates are needed.
 
 ## Evaluation
 
@@ -46,20 +46,8 @@ Use these functions to check recovery and model performance.
 [`aggregate_data`](evaluation/metrics.md)
 : Aggregate one or more numeric columns by optional grouping columns.
 
-[`model.plot_parameter_recovery`, `model.plot_population_recovery`, and `model.plot_random_recovery`](evaluation/diagnostics.md)
+[`plot_parameter_recovery`, `plot_population_recovery`, and `plot_random_recovery`](evaluation/diagnostics.md)
 : Plot model-level recovery diagnostics for one fitted workflow.
-
-Advanced BayesFlow posterior diagnostics can be computed directly with
-`model.workflow.compute_default_diagnostics(...)`.
-
-```python
-diagnostics = model.workflow.compute_default_diagnostics(
-    test_data=test_data,
-    num_samples=500,
-    variable_keys=None,
-    as_data_frame=True,
-)
-```
 
 ## Advanced
 

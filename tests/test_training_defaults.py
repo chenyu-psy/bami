@@ -2,6 +2,8 @@
 
 import inspect
 
+import pytest
+
 from bami.workflows import training
 from bami.workflows.hierarchical import HierarchicalWorkflow
 from bami.workflows.simple import SimpleWorkflow
@@ -16,7 +18,6 @@ EXPECTED_TRAIN_DEFAULTS = {
     "min_delta": 0.1,
     "workers": 1,
     "max_queue_size": 4,
-    "torch_device": None,
     "verbose": 1,
 }
 
@@ -44,6 +45,23 @@ def test_workflow_train_method_signatures_match_shared_defaults():
         signature = inspect.signature(method)
         for key, value in EXPECTED_TRAIN_DEFAULTS.items():
             assert signature.parameters[key].default == value
+
+
+def test_workflow_constructors_default_to_cpu_device():
+    """Workflow runtime device should default to CPU for stable package use."""
+
+    simple_sig = inspect.signature(SimpleWorkflow)
+    hierarchy_sig = inspect.signature(HierarchicalWorkflow)
+
+    assert simple_sig.parameters["device"].default == "cpu"
+    assert hierarchy_sig.parameters["device"].default == "cpu"
+
+
+def test_train_workflow_rejects_removed_torch_device():
+    """Training config should no longer accept the old torch_device setting."""
+
+    with pytest.raises(TypeError, match="torch_device has been removed"):
+        training.train_workflow(object(), torch_device="cpu")
 
 
 def test_random_workflow_without_group_config_uses_shared_defaults(monkeypatch):

@@ -97,7 +97,7 @@ model = SimpleWorkflow(
     },
     simulator=simulate_sdm_simple,
     observation="trial",
-    obs_names=["error_rad"],
+    obs_names=["error"],
     n_trials=25,
 )
 
@@ -191,7 +191,7 @@ obs_names = ["pc", "mrt", "vrt"]
 For trial-level SDM errors, this might be:
 
 ```python
-obs_names = ["error_rad"]
+obs_names = ["error"]
 ```
 
 ### Input format
@@ -226,11 +226,12 @@ history = model.train_workflow(
 posterior = model.sample_posterior(test_data=sim, num_samples=500)
 ```
 
-`model.simulate(...)` generates prior-predictive data using the workflow's
+The `simulate(...)` method generates prior-predictive data using the workflow's
 data-shape contract. The `train_workflow(...)` method fits the workflow and can
 load or save a trained workflow file. Simple workflows use
-`model.sample_posterior(...)` for posterior draws; hierarchical workflows use
-`model.sample_group_posterior(...)` for group-level posterior draws.
+`SimpleWorkflow.sample_posterior(...)` for posterior draws; hierarchical
+workflows use `HierarchicalWorkflow.sample_group_posterior(...)` for group-level
+posterior draws.
 
 For hierarchical subject-level parameters, train the random-effect workflow
 separately. By default it inherits the training settings saved by
@@ -239,6 +240,43 @@ separately. By default it inherits the training settings saved by
 ```python
 model.train_random_workflow(file="saved_workflows/my_random_workflow.keras")
 ```
+
+This legacy random workflow is a BayesFlow posterior workflow. Its
+`sample_random_posterior(...)` method returns posterior draws, but the current
+random-recovery diagnostic no longer depends on it.
+
+For deterministic subject-level recovery, use the Route C random estimator
+instead:
+
+```python
+model.train_random_estimator(file="saved_workflows/my_random_estimator.pt")
+estimates = model.estimate_random_parameter(
+    observed_data=simulated_or_observed_data,
+    group_samples=group_samples,
+)
+```
+
+The training call returns `None` and stores the trained or loaded estimator on
+the workflow object's `random_estimator` attribute. Call
+`estimate_random_parameter(...)` to get point estimates in a `pandas.DataFrame`,
+not posterior draws. By default, the table contains only `dataset_id`,
+`subject_id`, and public parameter estimates. Use `include_scales=True` to add
+raw, group-centered deviation, and standardized z-scale columns for diagnostic
+work. `HierarchicalWorkflow.plot_random_recovery(...)` uses this estimator
+path. Do not use estimator output for posterior intervals or coverage checks.
+
+By default, `train_random_estimator(...)` uses `sigma_values=None`. This chooses
+parameter-specific low, mid, and high group-sigma values from the model's group
+sigma prior. A sequence such as `(0.05, 0.15, 0.45)` keeps the older behavior
+and shares one sigma grid across all hierarchical parameters. A dict can be
+used when a project needs manual parameter-specific grids, for example
+`{"c": (0.05, 0.15, 0.45), "kappa": (0.1, 0.3, 0.8)}`. All sigma grids use
+synchronized bins rather than Cartesian products.
+
+Random recovery diagnostics process datasets in chunks to keep memory use
+bounded. Use `recovery_batch_size` to control how many simulated recovery
+datasets are processed per chunk, and use `sample_batch_size` only for the
+group-posterior sampling mini-batch size.
 
 ### Adjusting training size
 
@@ -302,6 +340,18 @@ in notebook or cross-platform workflows.
       heading_level: 3
 
 ::: bami.workflows.hierarchical.HierarchicalWorkflow.sample_random_posterior
+    options:
+      show_root_heading: true
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: bami.workflows.hierarchical.HierarchicalWorkflow.train_random_estimator
+    options:
+      show_root_heading: true
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: bami.workflows.hierarchical.HierarchicalWorkflow.estimate_random_parameter
     options:
       show_root_heading: true
       show_root_toc_entry: false

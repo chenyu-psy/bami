@@ -64,7 +64,6 @@ def _train_kwargs() -> dict:
         "min_delta": 0.0,
         "workers": 1,
         "max_queue_size": 1,
-        "torch_device": None,
         "verbose": 0,
     }
 

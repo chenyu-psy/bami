@@ -21,33 +21,22 @@ def simulate_ezdm_simple(
 ) -> np.ndarray:
     """Simulate one ezDM aggregate summary row for bami workflows.
 
-    Parameters
-    ----------
-    v
-        Drift rate. Positive values imply accuracy above chance.
-    a
-        Boundary separation. Must be positive.
-    t0
-        Non-decision time. Must be positive.
-    n_trials
-        Number of trials used to sample observed accuracy.
-    s
-        Diffusion scaling parameter from Wagenmakers et al. (2007).
-    rng
-        Optional NumPy random generator. Defaults to ``np.random`` so existing
-        project-level seeding remains effective.
-
-    Returns
-    -------
-    numpy.ndarray
-        Summary vector ``[pc, mrt, vrt]``.
-
-    Notes
-    -----
     This simulator uses EZ moment equations for the mean and variance of
     response time. It samples only the observed accuracy from ``n_trials`` so it
     stays a compact summary-level simulator rather than a trial-level
     diffusion-process simulator.
+
+    Args:
+        v: Drift rate. Positive values imply accuracy above chance.
+        a: Boundary separation. Must be positive.
+        t0: Non-decision time. Must be positive.
+        n_trials: Number of trials used to sample observed accuracy.
+        s: Diffusion scaling parameter from Wagenmakers et al. (2007).
+        rng (numpy.random.Generator | None): Optional NumPy random generator. Defaults to ``np.random`` so
+            existing project-level seeding remains effective.
+
+    Returns:
+        numpy.ndarray: Summary vector ``[pc, mrt, vrt]``.
     """
 
     v = _check_finite(v, "v")
@@ -81,16 +70,13 @@ def simulate_ezdm_simple(
 def _inv_logit(value: float) -> float:
     """Return a numerically stable inverse-logit value.
 
-    Parameters
-    ----------
-    value
-        Real-valued logit.
+    Args:
+        value:
+            Real-valued logit.
 
-    Returns
-    -------
-    float
-        Probability between 0 and 1, allowing floating-point edge values for
-        very large finite logits.
+    Returns:
+        float: Probability between 0 and 1, allowing floating-point edge values for
+            very large finite logits.
     """
 
     if value >= 0:
@@ -102,17 +88,14 @@ def _inv_logit(value: float) -> float:
 def _edge_correct_pc(n_correct: int, n_trials: int) -> float:
     """Move observed accuracy away from exactly zero or one.
 
-    Parameters
-    ----------
-    n_correct
-        Number of correct responses.
-    n_trials
-        Number of simulated trials.
+    Args:
+        n_correct:
+            Number of correct responses.
+        n_trials:
+            Number of simulated trials.
 
-    Returns
-    -------
-    float
-        Edge-corrected proportion correct.
+    Returns:
+        float: Edge-corrected proportion correct.
     """
 
     if n_correct == 0:
@@ -125,17 +108,14 @@ def _edge_correct_pc(n_correct: int, n_trials: int) -> float:
 def _check_finite(value: float, name: str) -> float:
     """Validate a finite scalar value.
 
-    Parameters
-    ----------
-    value
-        Candidate scalar value.
-    name
-        Parameter name used in error messages.
+    Args:
+        value:
+            Candidate scalar value.
+        name:
+            Parameter name used in error messages.
 
-    Returns
-    -------
-    float
-        Finite scalar value.
+    Returns:
+        float: Finite scalar value.
     """
 
     checked = float(value)
@@ -147,17 +127,14 @@ def _check_finite(value: float, name: str) -> float:
 def _check_positive(value: float, name: str) -> float:
     """Validate a positive scalar value.
 
-    Parameters
-    ----------
-    value
-        Candidate scalar value.
-    name
-        Parameter name used in error messages.
+    Args:
+        value:
+            Candidate scalar value.
+        name:
+            Parameter name used in error messages.
 
-    Returns
-    -------
-    float
-        Positive scalar value.
+    Returns:
+        float: Positive scalar value.
     """
 
     checked = _check_finite(value, name)
@@ -169,15 +146,12 @@ def _check_positive(value: float, name: str) -> float:
 def _check_n_trials(n_trials: int) -> int:
     """Validate the number of simulated trials.
 
-    Parameters
-    ----------
-    n_trials
-        Candidate trial count.
+    Args:
+        n_trials:
+            Candidate trial count.
 
-    Returns
-    -------
-    int
-        Positive integer trial count.
+    Returns:
+        int: Positive integer trial count.
     """
 
     checked = int(n_trials)

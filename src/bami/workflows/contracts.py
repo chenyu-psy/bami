@@ -24,16 +24,13 @@ VALID_OBSERVATIONS = {"aggregate", "trial"}
 def validate_workflow_contract(contract: Mapping) -> dict:
     """Validate and normalize a workflow contract.
 
-    Parameters
-    ----------
-    contract
-        Mapping with model-specific workflow information. Required fields are
-        ``name``, ``param_names``, ``priors``, ``simulator``, and
-        ``data_width``.
-    Returns
-    -------
-    dict
-        A shallow normalized copy of the contract.
+    Args:
+        contract: Mapping with model-specific workflow information. Required
+            fields are ``name``, ``param_names``, ``priors``, ``simulator``, and
+            ``data_width``.
+
+    Returns:
+        dict: A shallow normalized copy of the contract.
     """
 
     if not isinstance(contract, Mapping):
@@ -56,18 +53,14 @@ def validate_workflow_contract(contract: Mapping) -> dict:
 def validate_observation(observation: str | None, workflow_name: str) -> str:
     """Validate an explicit workflow observation contract.
 
-    Parameters
-    ----------
-    observation
-        Candidate observation contract.
-    workflow_name
-        Name used in error messages, for example ``"SimpleWorkflow"``.
+    Args:
+        observation: Candidate observation contract.
+        workflow_name: Name used in error messages, for example
+            ``"SimpleWorkflow"``.
 
-    Returns
-    -------
-    str
-        Validated observation contract. Supported values are ``"aggregate"``
-        and ``"trial"``.
+    Returns:
+        str: Validated observation contract. Supported values are
+            ``"aggregate"`` and ``"trial"``.
     """
 
     if observation is None:
@@ -87,15 +80,12 @@ def validate_observation(observation: str | None, workflow_name: str) -> str:
 def _check_name(name) -> str:
     """Validate the model name in a workflow contract.
 
-    Parameters
-    ----------
-    name
-        Candidate model name.
+    Args:
+        name:
+            Candidate model name.
 
-    Returns
-    -------
-    str
-        Non-empty model name.
+    Returns:
+        str: Non-empty model name.
     """
 
     checked = str(name).strip()
@@ -107,15 +97,12 @@ def _check_name(name) -> str:
 def _check_param_names(param_names) -> list[str]:
     """Validate parameter names in a workflow contract.
 
-    Parameters
-    ----------
-    param_names
-        Candidate sequence of parameter names.
+    Args:
+        param_names:
+            Candidate sequence of parameter names.
 
-    Returns
-    -------
-    list[str]
-        Non-empty parameter-name list.
+    Returns:
+        list[str]: Non-empty parameter-name list.
     """
 
     if isinstance(param_names, str):
@@ -134,15 +121,12 @@ def _check_param_names(param_names) -> list[str]:
 def _check_priors(priors) -> None:
     """Validate that priors are mapping-like.
 
-    Parameters
-    ----------
-    priors
-        Prior specification supplied to the workflow contract.
+    Args:
+        priors:
+            Prior specification supplied to the workflow contract.
 
-    Returns
-    -------
-    None
-        Raises an error when the prior specification is not mapping-like.
+    Returns:
+        None: Raises an error when the prior specification is not mapping-like.
     """
 
     if not isinstance(priors, Mapping):
@@ -152,15 +136,12 @@ def _check_priors(priors) -> None:
 def _check_data_width(data_width) -> int:
     """Validate subject data row width.
 
-    Parameters
-    ----------
-    data_width
-        Candidate number of values returned by ``simulator``.
+    Args:
+        data_width:
+            Candidate number of values returned by ``simulator``.
 
-    Returns
-    -------
-    int
-        Positive integer row width.
+    Returns:
+        int: Positive integer row width.
     """
 
     checked = int(data_width)
@@ -172,17 +153,14 @@ def _check_data_width(data_width) -> int:
 def _check_callable(value, field_name: str) -> None:
     """Validate that a contract field is callable.
 
-    Parameters
-    ----------
-    value
-        Candidate callable.
-    field_name
-        Field name used in error messages.
+    Args:
+        value:
+            Candidate callable.
+        field_name:
+            Field name used in error messages.
 
-    Returns
-    -------
-    None
-        Raises an error when ``value`` is not callable.
+    Returns:
+        None: Raises an error when ``value`` is not callable.
     """
 
     if not callable(value):

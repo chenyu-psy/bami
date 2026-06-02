@@ -10,64 +10,53 @@ import os
 os.environ.setdefault("KERAS_BACKEND", "torch")
 import keras
 
+from bami.inference.runtime import runtime_device
+
 
 def save_workflow_weights(model, checkpoint_path: str | Path) -> Path:
     """Save trained workflow approximator to a `.keras` artifact.
 
-    Parameters
-    ----------
-    model : object
-        Trained model with a BayesFlow `workflow.approximator`.
-    checkpoint_path : str | Path
-        Path to `.keras` checkpoint file.
+    Args:
+        model (object): Trained model with a BayesFlow ``workflow.approximator``.
+        checkpoint_path: Path to the ``.keras`` checkpoint file.
 
-    Returns
-    -------
-    Path
-        Saved checkpoint path.
+    Returns:
+        pathlib.Path: Saved checkpoint path.
     """
 
     ckpt_path = Path(checkpoint_path)
     ckpt_path.parent.mkdir(parents=True, exist_ok=True)
-    model.workflow.approximator.save(ckpt_path)
+    with runtime_device(getattr(model, "device", "cpu")):
+        model.workflow.approximator.save(ckpt_path)
     return ckpt_path
 
 
-def load_workflow_weights(model, checkpoint_path: str | Path):
+def load_workflow_weights(model, checkpoint_path: str | Path) -> object:
     """Load a `.keras` approximator artifact into a model workflow.
 
-    Parameters
-    ----------
-    model : object
-        Model instance with initialized BayesFlow workflow.
-    checkpoint_path : str | Path
-        Path to `.keras` checkpoint file.
+    Args:
+        model (object): Model instance with initialized BayesFlow workflow.
+        checkpoint_path: Path to the ``.keras`` checkpoint file.
 
-    Returns
-    -------
-    object
-        The same model with loaded network weights.
+    Returns:
+        object: The same model with loaded network weights.
     """
 
     ckpt_path = Path(checkpoint_path)
-    model.workflow.approximator = keras.saving.load_model(ckpt_path)
+    with runtime_device(getattr(model, "device", "cpu")):
+        model.workflow.approximator = keras.saving.load_model(ckpt_path)
     return model
 
 
-def load_model(model, checkpoint_path: str | Path):
+def load_model(model, checkpoint_path: str | Path) -> object:
     """Load a trained checkpoint into a configured model shell.
 
-    Parameters
-    ----------
-    model
-        Model instance with initialized BayesFlow workflow.
-    checkpoint_path
-        Path to the saved `.keras` checkpoint.
+    Args:
+        model (object): Model instance with initialized BayesFlow workflow.
+        checkpoint_path: Path to the saved ``.keras`` checkpoint.
 
-    Returns
-    -------
-    object
-        The same model with trained network weights loaded.
+    Returns:
+        object: The same model with trained network weights loaded.
     """
 
     return load_workflow_weights(model, checkpoint_path)

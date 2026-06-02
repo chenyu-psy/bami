@@ -23,27 +23,20 @@ def simulate_m3_custom(
 ) -> np.ndarray:
     """Simulate response counts from a user-defined M3 activation function.
 
-    Parameters
-    ----------
-    n_trials
-        Number of responses to draw.
-    activation_fn
-        Function called as ``activation_fn(**parms)``. It must return a
-        one-dimensional vector of response-category activations.
-    n_options
-        Number of response options represented by each activation category.
-    rule
-        Choice rule used to convert activations to probabilities.
-    rng
-        Optional NumPy random generator. Defaults to ``np.random`` so existing
-        project-level seeding remains effective.
-    **parms
-        Public-scale model parameters passed to ``activation_fn``.
+    Args:
+        n_trials: Number of responses to draw.
+        activation_fn (Callable): Function called as ``activation_fn(**parms)``. It must
+            return a one-dimensional vector of response-category activations.
+        n_options: Number of response options represented by each activation
+            category.
+        rule: Choice rule used to convert activations to probabilities.
+        rng (numpy.random.Generator | None): Optional NumPy random generator. Defaults to ``np.random`` so
+            existing project-level seeding remains effective.
+        **parms (Any): Public-scale model parameters passed to ``activation_fn``.
 
-    Returns
-    -------
-    numpy.ndarray
-        Integer response counts with one count per activation category.
+    Returns:
+        numpy.ndarray: Integer response counts with one count per activation
+            category.
     """
 
     n_trials = _check_n_trials(n_trials)
@@ -65,21 +58,16 @@ def simulate_m3_custom(
 def prop_m3(row, n_trials: int, model=None) -> np.ndarray:
     """Convert one M3 count row to response proportions.
 
-    Parameters
-    ----------
-    row
-        Five response-category counts in M3 order.
-    n_trials
-        Number of responses represented by ``row``.
-    model
-        Unused workflow-compatible argument. Workflow row transforms may
-        receive the model object, but this normalization only needs ``row`` and
-        ``n_trials``.
+    Workflow row transforms may receive the model object, but this
+    normalization only needs ``row`` and ``n_trials``.
 
-    Returns
-    -------
-    numpy.ndarray
-        Response proportions with the same width as ``row``.
+    Args:
+        row: Five response-category counts in M3 order.
+        n_trials: Number of responses represented by ``row``.
+        model: Unused workflow-compatible argument.
+
+    Returns:
+        numpy.ndarray: Response proportions with the same width as ``row``.
     """
 
     row_arr = np.asarray(row, dtype=np.float32)
@@ -95,21 +83,18 @@ def _choice_probs(
 ) -> np.ndarray:
     """Convert response activations to category probabilities.
 
-    Parameters
-    ----------
-    activations
-        Response-category activation scores.
-    n_options
-        Number of response options represented by each category. A single
-        integer is broadcast to all categories.
-    rule
-        Choice rule. ``"softmax"`` uses temperature-2 softmax. ``"luce"`` and
-        ``"simple"`` treat activations as nonnegative strengths.
+    Args:
+        activations:
+            Response-category activation scores.
+        n_options:
+            Number of response options represented by each category. A single
+            integer is broadcast to all categories.
+        rule:
+            Choice rule. ``"softmax"`` uses temperature-2 softmax. ``"luce"`` and
+            ``"simple"`` treat activations as nonnegative strengths.
 
-    Returns
-    -------
-    numpy.ndarray
-        Probability vector that sums to one.
+    Returns:
+        numpy.ndarray: Probability vector that sums to one.
     """
 
     logits = np.asarray(activations, dtype=float)
@@ -130,17 +115,14 @@ def _resolve_n_options(
 ) -> np.ndarray:
     """Return one positive option count per response category.
 
-    Parameters
-    ----------
-    n_options
-        User-provided option count setting.
-    n_categories
-        Number of response categories implied by the activation vector.
+    Args:
+        n_options:
+            User-provided option count setting.
+        n_categories:
+            Number of response categories implied by the activation vector.
 
-    Returns
-    -------
-    numpy.ndarray
-        Positive option counts with length ``n_categories``.
+    Returns:
+        numpy.ndarray: Positive option counts with length ``n_categories``.
     """
 
     if n_options is None:
@@ -166,19 +148,16 @@ def _weighted_strengths(
 ) -> np.ndarray:
     """Return option-weighted strengths for one choice rule.
 
-    Parameters
-    ----------
-    activations
-        One-dimensional activation vector.
-    n_options
-        Positive option counts with the same length as ``activations``.
-    rule
-        Choice rule name.
+    Args:
+        activations:
+            One-dimensional activation vector.
+        n_options:
+            Positive option counts with the same length as ``activations``.
+        rule:
+            Choice rule name.
 
-    Returns
-    -------
-    numpy.ndarray
-        Positive or nonnegative weighted strengths.
+    Returns:
+        numpy.ndarray: Positive or nonnegative weighted strengths.
     """
 
     if np.any(~np.isfinite(activations)):
@@ -200,15 +179,12 @@ def _weighted_strengths(
 def _check_n_trials(n_trials: int) -> int:
     """Validate the number of simulated responses.
 
-    Parameters
-    ----------
-    n_trials
-        Candidate response count.
+    Args:
+        n_trials:
+            Candidate response count.
 
-    Returns
-    -------
-    int
-        Positive integer response count.
+    Returns:
+        int: Positive integer response count.
     """
 
     checked = int(n_trials)

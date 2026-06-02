@@ -10,12 +10,11 @@ from .priors import (
     mu_raw_key,
     raw_key,
 )
-from .runtime import configure_torch_device
+from .runtime import runtime_device, validate_device
 from .transforms import transform_hierarchical_samples, transform_simple_samples
 
 __all__ = [
     "apply_link",
-    "configure_torch_device",
     "draw_prior",
     "draw_prior_with_raw",
     "invert_link",
@@ -24,7 +23,9 @@ __all__ = [
     "log_sigma_key",
     "mu_raw_key",
     "raw_key",
+    "runtime_device",
     "save_workflow_weights",
     "transform_hierarchical_samples",
     "transform_simple_samples",
+    "validate_device",
 ]

@@ -21,22 +21,18 @@ NTransform = Literal["log_range", "linear_range"]
 class InputFormat:
     """Describe how one workflow input row should encode trial count.
 
-    Parameters
-    ----------
-    kind
-        Named input preset. Supported values are ``"aggregate_summary"``,
-        ``"proportions"``, and ``"counts"``.
-    add_n
-        Whether encoded rows append a trial-count feature.
-    n_range
-        Two-value range used to scale trial counts when ``add_n`` is true.
-    n_transform
-        Named transform used for the appended trial-count feature.
+    Use this object when a simulator row does not by itself show how many
+    trials produced the row. Most user code should create one with
+    ``aggregate_summary()``, ``proportions()``, or ``counts()``.
 
-    Returns
-    -------
-    None
-        The initialized format exposes ``encode`` and ``to_dict``.
+    Args:
+        kind: Named input preset. Supported values are
+            ``"aggregate_summary"``, ``"proportions"``, and ``"counts"``.
+        add_n: Whether encoded rows append a trial-count feature.
+        n_range: Two-value range used to scale trial counts when ``add_n`` is
+            true.
+        n_transform: Named transform used for the appended trial-count
+            feature.
     """
 
     kind: InputKind
@@ -47,10 +43,8 @@ class InputFormat:
     def __post_init__(self) -> None:
         """Validate format fields after dataclass initialization.
 
-        Returns
-        -------
-        None
-            Raises ``ValueError`` when the format is internally inconsistent.
+        Returns:
+            None: Raises ``ValueError`` when the format is internally inconsistent.
         """
 
         if self.kind not in {"aggregate_summary", "proportions", "counts"}:
@@ -65,15 +59,11 @@ class InputFormat:
     def output_width(self, data_width: int) -> int:
         """Return encoded row width for a base simulator row width.
 
-        Parameters
-        ----------
-        data_width
-            Number of features returned by the simulator.
+        Args:
+            data_width: Number of features returned by the simulator.
 
-        Returns
-        -------
-        int
-            Encoded input width.
+        Returns:
+            int: Encoded input width.
         """
 
         width = int(data_width)
@@ -84,17 +74,12 @@ class InputFormat:
     def encode(self, row, n_trials: int) -> np.ndarray:
         """Encode one workflow input row.
 
-        Parameters
-        ----------
-        row
-            Base simulator row before trial-count encoding.
-        n_trials
-            Number of trials represented by ``row``.
+        Args:
+            row: Base simulator row before trial-count encoding.
+            n_trials: Number of trials represented by ``row``.
 
-        Returns
-        -------
-        numpy.ndarray
-            Encoded float row.
+        Returns:
+            numpy.ndarray: Encoded float row.
         """
 
         row_arr = np.asarray(row, dtype=np.float32).reshape(-1)
@@ -106,15 +91,11 @@ class InputFormat:
     def transform_n(self, n_trials: int) -> float:
         """Scale a trial count with the configured named transform.
 
-        Parameters
-        ----------
-        n_trials
-            Trial count to encode.
+        Args:
+            n_trials: Trial count to encode.
 
-        Returns
-        -------
-        float
-            Scaled trial-count feature.
+        Returns:
+            float: Scaled trial-count feature.
         """
 
         if not self.add_n:
@@ -136,10 +117,8 @@ class InputFormat:
     def to_dict(self) -> dict:
         """Return JSON-safe input-format metadata.
 
-        Returns
-        -------
-        dict
-            Metadata containing only strings, booleans, and numbers.
+        Returns:
+            dict: Metadata containing only strings, booleans, and numbers.
         """
 
         return {
@@ -153,17 +132,13 @@ class InputFormat:
     def _scale_to_unit_interval(value: float, low: float, high: float) -> float:
         """Scale a value from ``[low, high]`` to ``[-1, 1]``.
 
-        Parameters
-        ----------
-        value
-            Value to scale.
-        low, high
-            Inclusive lower and upper bounds.
+        Args:
+            value: Value to scale.
+            low: Inclusive lower bound.
+            high: Inclusive upper bound.
 
-        Returns
-        -------
-        float
-            Scaled value.
+        Returns:
+            float: Scaled value.
         """
 
         return float(2.0 * (value - low) / (high - low) - 1.0)
@@ -172,15 +147,12 @@ class InputFormat:
     def _check_n_range(n_range) -> tuple[int, int]:
         """Validate a two-value positive trial-count range.
 
-        Parameters
-        ----------
-        n_range
-            Candidate range.
+        Args:
+            n_range:
+                Candidate range.
 
-        Returns
-        -------
-        tuple[int, int]
-            Validated range.
+        Returns:
+            tuple[int, int]: Validated range.
         """
 
         if n_range is None:
@@ -200,18 +172,17 @@ def aggregate_summary(
 ) -> InputFormat:
     """Create an input format for fixed-width aggregate summaries.
 
-    Parameters
-    ----------
-    n_range
-        Trial-count range used to scale the appended trial-count feature.
-    n_transform
-        Named transform for the appended trial-count feature.
+    Use this when each simulator output row is a summary statistic vector and
+    the model should also see how many trials produced that summary.
 
-    Returns
-    -------
-    InputFormat
-        Format that preserves summary features and appends encoded
-        ``n_trials``.
+    Args:
+        n_range: Trial-count range used to scale the appended trial-count
+            feature.
+        n_transform: Named transform for the appended trial-count feature.
+
+    Returns:
+        InputFormat: Format that preserves summary features and appends
+            encoded ``n_trials``.
     """
 
     return InputFormat(
@@ -228,18 +199,17 @@ def proportions(
 ) -> InputFormat:
     """Create an input format for proportion rows with explicit trial count.
 
-    Parameters
-    ----------
-    n_range
-        Trial-count range used to scale the appended trial-count feature.
-    n_transform
-        Named transform for the appended trial-count feature.
+    Proportions lose information about sample size, so this format appends an
+    encoded trial count that the workflow can learn from.
 
-    Returns
-    -------
-    InputFormat
-        Format that preserves proportion features and appends encoded
-        ``n_trials``.
+    Args:
+        n_range: Trial-count range used to scale the appended trial-count
+            feature.
+        n_transform: Named transform for the appended trial-count feature.
+
+    Returns:
+        InputFormat: Format that preserves proportion features and appends
+            encoded ``n_trials``.
     """
 
     return InputFormat(
@@ -257,20 +227,19 @@ def counts(
 ) -> InputFormat:
     """Create an input format for count rows.
 
-    Parameters
-    ----------
-    add_n
-        Whether to append encoded ``n_trials`` in addition to count sums.
-    n_range
-        Trial-count range required when ``add_n`` is true.
-    n_transform
-        Named transform for the appended trial-count feature.
+    Count rows already carry trial-count information through their sum. Set
+    ``add_n=True`` only when you want the total trial count as an explicit
+    extra feature.
 
-    Returns
-    -------
-    InputFormat
-        Format that preserves count rows and optionally appends encoded
-        ``n_trials``.
+    Args:
+        add_n: Whether to append encoded ``n_trials`` in addition to count
+            sums.
+        n_range: Trial-count range required when ``add_n`` is true.
+        n_transform: Named transform for the appended trial-count feature.
+
+    Returns:
+        InputFormat: Format that preserves count rows and optionally appends
+            encoded ``n_trials``.
     """
 
     return InputFormat(

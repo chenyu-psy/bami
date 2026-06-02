@@ -10,67 +10,95 @@ hierarchy.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import contextmanager
+import warnings
 
 import numpy as np
 import bayesflow as bf
 
 from bami.inputs import InputFormat
+from bami.inference.runtime import runtime_device, validate_device
 from bami.workflows import training
 from bami.workflows.contracts import validate_observation, validate_workflow_contract
+
+_SINGLETON_SOFTMAX_MESSAGE = (
+    r"You are using a softmax over axis .* of a tensor of shape .*"
+    r"This axis has size 1.*"
+)
+
+
+@contextmanager
+def _suppress_singleton_softmax_warning(enabled: bool):
+    """Hide the harmless DeepSet warning for one-row aggregate summaries.
+
+    Simple aggregate workflows pass one summary row per simulated dataset into
+    BayesFlow's DeepSet. Its attention pooling therefore applies softmax over a
+    set axis of size one. The operation is harmless but otherwise clutters
+    researcher-facing training and sampling logs.
+
+    Args:
+        enabled: Whether to suppress the singleton softmax warning inside this
+            context. Trial-level workflows pass ``False`` so their warnings stay
+            visible.
+
+    Yields:
+        None. Code inside the context runs with only this specific warning
+        filtered.
+    """
+
+    if not enabled:
+        yield
+        return
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=_SINGLETON_SOFTMAX_MESSAGE,
+            category=UserWarning,
+            module=r"keras\.src\.ops\.nn",
+        )
+        yield
 
 
 class SimpleWorkflow:
     """Build a non-hierarchical BayesFlow workflow from a simulator.
 
-    Parameters
-    ----------
-    name
-        Short model name attached to the BayesFlow workflow.
-    param_names
-        Public parameter names used by the model.
-    priors
-        Prior specification passed to ``draw_prior_with_raw``.
-    simulator
-        Function called as ``simulator(**params, n_trials=..., rng=...,
-        **simulator_kwargs)``.
-    observation
-        Observation contract. Use ``"aggregate"`` when the simulator returns
-        one fixed-width summary row, or ``"trial"`` when the simulator returns
-        one row per trial.
-    simulator_kwargs
-        Constant keyword arguments passed to ``simulator`` on every simulation.
-    data_width
-        Number of features returned by ``simulator``. For new code, prefer
-        ``obs_names`` so the column meanings are visible.
-    obs_names
-        Names of simulator output columns. When supplied, ``data_width`` is
-        inferred from ``len(obs_names)``.
-    contract
-        Optional compatibility mapping with ``name``, ``param_names``,
-        ``priors``, ``simulator``, and ``data_width``.
-    n_trials
-        Fixed number of trials passed to the simulator. Provide this or
-        ``n_trials_range``, but not both.
-    n_trials_range
-        Two-value range ``(low, high)``. Trial counts are drawn from
-        ``[low, high)`` for each simulated dataset.
-    include_trial_feature
-        Whether to append the simulated trial count to each data row.
-    input_format
-        Optional input-format helper. If supplied, it formats
-        simulator rows and trial counts instead of ``include_trial_feature``.
-    summary_dim
-        Width of the DeepSet summary network.
-    n_coupling_layers
-        Number of coupling layers in the inference network.
-    transform_samples
-        Optional posterior transform function. If omitted, raw samples are
-        transformed with ``transform_simple_samples`` and the contract priors.
+    Use this when one prior draw produces one independent dataset. Aggregate
+    observations are one fixed-width summary row; trial observations are one row
+    per trial.
 
-    Returns
-    -------
-    None
-        The initialized object exposes ``workflow`` and ``train_workflow``.
+    Args:
+        name: Short model name attached to the BayesFlow workflow.
+        param_names: Public parameter names used by this workflow.
+        priors: Prior specification passed to ``draw_prior_with_raw``.
+        simulator: Function called as
+            ``simulator(**params, n_trials=..., rng=..., **simulator_kwargs)``.
+        observation: Use ``"aggregate"`` when the simulator returns one
+            fixed-width summary row, or ``"trial"`` when it returns one row per
+            trial.
+        simulator_kwargs: Constant keyword arguments passed to ``simulator``
+            on every simulation.
+        data_width: Number of features returned by ``simulator``. For new
+            code, prefer ``obs_names`` so column meanings are visible.
+        obs_names: Names of simulator output columns. When supplied,
+            ``data_width`` is inferred from ``len(obs_names)``.
+        contract: Optional compatibility mapping with ``name``,
+            ``param_names``, ``priors``, ``simulator``, and ``data_width``.
+        n_trials: Fixed number of trials passed to the simulator. Provide
+            this or ``n_trials_range``, but not both.
+        n_trials_range: Range ``(low, high)``. Trial counts are drawn from
+            ``[low, high)`` for each simulated dataset.
+        include_trial_feature: Whether to append the simulated trial count to
+            each data row.
+        input_format: Optional helper that formats simulator rows and trial
+            counts instead of ``include_trial_feature``.
+        summary_dim: Width of the DeepSet summary network.
+        n_coupling_layers: Number of coupling layers in the inference
+            network.
+        transform_samples: Optional posterior transform function. If omitted,
+            raw samples are transformed with ``transform_simple_samples``.
+        device: Workflow runtime device. CPU is the stable default; use
+            ``"mps"`` or ``"cuda"`` only when accelerator training is desired.
     """
 
     workflow_level = "simple"
@@ -93,7 +121,9 @@ class SimpleWorkflow:
         summary_dim: int = 64,
         n_coupling_layers: int = 6,
         transform_samples: Callable | None = None,
+        device: str | None = "cpu",
     ):
+        self.device = validate_device(device)
         self.contract = self._resolve_contract(
             name=name,
             param_names=param_names,
@@ -126,7 +156,8 @@ class SimpleWorkflow:
         self.n_coupling_layers = int(n_coupling_layers)
         self._transform_samples = transform_samples
 
-        self._build_workflow()
+        with runtime_device(self.device):
+            self._build_workflow()
         self.validation_data = None
 
     @staticmethod
@@ -141,18 +172,18 @@ class SimpleWorkflow:
     ) -> dict:
         """Return a validated workflow contract.
 
-        Parameters
-        ----------
-        name, param_names, priors, simulator, data_width
-            Explicit simulator-first workflow settings.
-        contract
-            Optional legacy contract mapping. It is accepted so existing model
-            code can migrate one workflow at a time.
+        Args:
+            name: Optional workflow name from simulator-first setup.
+            param_names: Optional public parameter names.
+            priors: Optional prior specification.
+            simulator: Optional simulator callable.
+            data_width: Optional simulator output width.
+            obs_names: Optional simulator output column names.
+            contract: Optional legacy contract mapping. It is accepted so existing model
+                code can migrate one workflow at a time.
 
-        Returns
-        -------
-        dict
-            Validated workflow contract used internally by BayesFlow setup.
+        Returns:
+            dict: Validated workflow contract used internally by BayesFlow setup.
         """
 
         if contract is not None:
@@ -188,17 +219,14 @@ class SimpleWorkflow:
     ) -> list[str] | None:
         """Return validated observation names or ``None``.
 
-        Parameters
-        ----------
-        obs_names
-            Optional simulator-output column names.
-        data_width
-            Optional expected simulator-output width.
+        Args:
+            obs_names:
+                Optional simulator-output column names.
+            data_width:
+                Optional expected simulator-output width.
 
-        Returns
-        -------
-        list[str] or None
-            Validated observation names when supplied.
+        Returns:
+            list[str] or None: Validated observation names when supplied.
         """
 
         if obs_names is None:
@@ -216,16 +244,13 @@ class SimpleWorkflow:
     def _public_params(param: Mapping) -> dict:
         """Return simulator parameters after dropping raw inference keys.
 
-        Parameters
-        ----------
-        param
-            Prior draw containing public parameters and raw-space inference
-            variables.
+        Args:
+            param:
+                Prior draw containing public parameters and raw-space inference
+                variables.
 
-        Returns
-        -------
-        dict
-            Public-scale parameters suitable for ``simulator(**params)``.
+        Returns:
+            dict: Public-scale parameters suitable for ``simulator(**params)``.
         """
 
         public_params = {}
@@ -247,18 +272,15 @@ class SimpleWorkflow:
     ) -> tuple[str, int | None, tuple[int, int] | None]:
         """Validate fixed or flexible trial-count settings.
 
-        Parameters
-        ----------
-        n_trials
-            Fixed trial count, or ``None`` when using a range.
-        n_trials_range
-            Two-value range with lower and exclusive upper bounds, or ``None``
-            when using a fixed trial count.
+        Args:
+            n_trials:
+                Fixed trial count, or ``None`` when using a range.
+            n_trials_range:
+                Two-value range with lower and exclusive upper bounds, or ``None``
+                when using a fixed trial count.
 
-        Returns
-        -------
-        tuple[str, int | None, tuple[int, int] | None]
-            Trial design label and validated trial settings.
+        Returns:
+            tuple[str, int | None, tuple[int, int] | None]: Trial design label and validated trial settings.
         """
 
         if n_trials is not None and n_trials_range is not None:
@@ -272,15 +294,12 @@ class SimpleWorkflow:
     def _draw_n_trials(self, rng=np.random) -> int:
         """Draw the trial count for one simulated dataset.
 
-        Parameters
-        ----------
-        rng
-            NumPy-compatible random module or generator.
+        Args:
+            rng:
+                NumPy-compatible random module or generator.
 
-        Returns
-        -------
-        int
-            Fixed or sampled trial count.
+        Returns:
+            int: Fixed or sampled trial count.
         """
 
         if self.trial_design == "fixed":
@@ -291,11 +310,9 @@ class SimpleWorkflow:
     def _resolve_max_trials(self) -> int | None:
         """Return padded trial rows for trial observations.
 
-        Returns
-        -------
-        int or None
-            Fixed or largest flexible trial count for ``observation="trial"``;
-            ``None`` for aggregate workflows.
+        Returns:
+            int or None: Fixed or largest flexible trial count for ``observation="trial"``;
+                ``None`` for aggregate workflows.
         """
 
         if self.observation == "aggregate":
@@ -307,20 +324,16 @@ class SimpleWorkflow:
     def _build_workflow(self) -> None:
         """Build the simulator, networks, and BayesFlow workflow.
 
-        Returns
-        -------
-        None
-            Sets ``simulator``, ``summary_network``, ``inference_network``, and
-            ``workflow`` on this object.
+        Returns:
+            None: Sets ``simulator``, ``summary_network``, ``inference_network``, and
+                ``workflow`` on this object.
         """
 
         def _draw_prior():
             """Draw raw and public model parameters for one simulation.
 
-            Returns
-            -------
-            dict
-                Prior draw containing raw inference keys and public truth keys.
+            Returns:
+                dict: Prior draw containing raw inference keys and public truth keys.
             """
 
             from bami.inference.priors import draw_prior_with_raw
@@ -330,16 +343,13 @@ class SimpleWorkflow:
         def _simulate_data(**param):
             """Simulate one simple dataset.
 
-            Parameters
-            ----------
-            **param
-                Prior draw with public parameters and raw keys.
+            Args:
+                    **param
+                    Prior draw with public parameters and raw keys.
 
-            Returns
-            -------
-            dict[str, numpy.ndarray]
-                BayesFlow summary data matching the explicit observation
-                contract.
+            Returns:
+                dict[str, numpy.ndarray]: BayesFlow summary data matching the explicit observation
+                    contract.
             """
 
             n_trials = self._draw_n_trials(np.random)
@@ -392,10 +402,8 @@ class SimpleWorkflow:
     def _feature_width(self) -> int:
         """Return the final BayesFlow feature width for one simple row.
 
-        Returns
-        -------
-        int
-            Simulator row width plus optional trial-count feature.
+        Returns:
+            int: Simulator row width plus optional trial-count feature.
         """
 
         if self.input_format is not None:
@@ -411,11 +419,9 @@ class SimpleWorkflow:
     def _workflow_obs_names(self) -> list[str]:
         """Return feature names exposed on the BayesFlow workflow.
 
-        Returns
-        -------
-        list[str]
-            Observation feature names, plus design columns when the workflow
-            appends them.
+        Returns:
+            list[str]: Observation feature names, plus design columns when the workflow
+                appends them.
         """
 
         names = list(self.obs_names)
@@ -431,15 +437,12 @@ class SimpleWorkflow:
     ) -> InputFormat | None:
         """Validate an optional input format.
 
-        Parameters
-        ----------
-        input_format
-            Candidate input format or ``None``.
+        Args:
+            input_format:
+                Candidate input format or ``None``.
 
-        Returns
-        -------
-        InputFormat or None
-            The validated input format.
+        Returns:
+            InputFormat or None: The validated input format.
         """
 
         if input_format is None:
@@ -451,10 +454,8 @@ class SimpleWorkflow:
     def _input_format_metadata(self) -> dict | None:
         """Return JSON-safe input-format metadata for this workflow.
 
-        Returns
-        -------
-        dict or None
-            Metadata from ``input_format`` when one is configured.
+        Returns:
+            dict or None: Metadata from ``input_format`` when one is configured.
         """
 
         if self.input_format is None:
@@ -464,17 +465,14 @@ class SimpleWorkflow:
     def _append_trial_feature(self, row, n_trials: int) -> np.ndarray:
         """Append the trial count to one simulator row.
 
-        Parameters
-        ----------
-        row
-            Simulator output before workflow-level design features.
-        n_trials
-            Trial count used for this simulated dataset.
+        Args:
+            row:
+                Simulator output before workflow-level design features.
+            n_trials:
+                Trial count used for this simulated dataset.
 
-        Returns
-        -------
-        numpy.ndarray
-            One row with the trial-count feature appended.
+        Returns:
+            numpy.ndarray: One row with the trial-count feature appended.
         """
 
         row_arr = np.asarray(row, dtype=np.float32).reshape(-1)
@@ -483,15 +481,12 @@ class SimpleWorkflow:
     def _as_data_row(self, row) -> np.ndarray:
         """Convert simulator output to BayesFlow simple data shape.
 
-        Parameters
-        ----------
-        row
-            Subject-level simulator output with ``data_width`` values.
+        Args:
+            row:
+                Subject-level simulator output with ``data_width`` values.
 
-        Returns
-        -------
-        numpy.ndarray
-            Float array with shape ``(1, data_width)``.
+        Returns:
+            numpy.ndarray: Float array with shape ``(1, data_width)``.
         """
 
         feature_width = self._feature_width()
@@ -509,17 +504,14 @@ class SimpleWorkflow:
     def _as_aggregate_data(self, row, n_trials: int) -> np.ndarray:
         """Format one aggregate simulator row for BayesFlow.
 
-        Parameters
-        ----------
-        row
-            Simulator output representing one summarized dataset.
-        n_trials
-            Trial count used to produce ``row``.
+        Args:
+            row:
+                Simulator output representing one summarized dataset.
+            n_trials:
+                Trial count used to produce ``row``.
 
-        Returns
-        -------
-        numpy.ndarray
-            Aggregate data with shape ``(1, feature_width)``.
+        Returns:
+            numpy.ndarray: Aggregate data with shape ``(1, feature_width)``.
         """
 
         if self.input_format is not None:
@@ -531,18 +523,15 @@ class SimpleWorkflow:
     def _as_trial_data(self, rows, n_trials: int) -> np.ndarray:
         """Format trial simulator rows for BayesFlow.
 
-        Parameters
-        ----------
-        rows
-            Trial observation rows returned by the simulator.
-        n_trials
-            Number of active trials represented by ``rows``.
+        Args:
+            rows:
+                Trial observation rows returned by the simulator.
+            n_trials:
+                Number of active trials represented by ``rows``.
 
-        Returns
-        -------
-        numpy.ndarray
-            Data with shape ``(n_trials, data_width)`` for fixed designs or
-            ``(max_trials, data_width + 1)`` for flexible designs.
+        Returns:
+            numpy.ndarray: Data with shape ``(n_trials, data_width)`` for fixed designs or
+                ``(max_trials, data_width + 1)`` for flexible designs.
         """
 
         arr = np.asarray(rows, dtype=np.float32)
@@ -564,16 +553,13 @@ class SimpleWorkflow:
     def _prepare_observed_counts(self, counts) -> tuple[np.ndarray, list]:
         """Convert simple count rows to BayesFlow summary data.
 
-        Parameters
-        ----------
-        counts
-            Array ending in ``data_width`` count features. A final trial-count
-            feature is appended when ``include_trial_feature`` is enabled.
+        Args:
+            counts:
+                Array ending in ``data_width`` count features. A final trial-count
+                feature is appended when ``include_trial_feature`` is enabled.
 
-        Returns
-        -------
-        tuple[numpy.ndarray, list]
-            Batched data array and row identifiers.
+        Returns:
+            tuple[numpy.ndarray, list]: Batched data array and row identifiers.
         """
 
         if self.observation != "aggregate":
@@ -618,15 +604,11 @@ class SimpleWorkflow:
     def convert_posterior(self, samples: dict) -> dict:
         """Transform raw posterior samples to public parameter keys.
 
-        Parameters
-        ----------
-        samples
-            Raw posterior sample dictionary from BayesFlow.
+        Args:
+            samples: Raw posterior sample dictionary from BayesFlow.
 
-        Returns
-        -------
-        dict
-            Posterior samples with public-scale parameter keys added.
+        Returns:
+            dict: Posterior samples with public-scale parameter keys added.
         """
 
         if self._transform_samples is not None:
@@ -638,20 +620,17 @@ class SimpleWorkflow:
     def simulate(self, n_datasets: int) -> Mapping[str, np.ndarray]:
         """Simulate datasets from this simple workflow.
 
-        Parameters
-        ----------
-        n_datasets
-            Number of simulated datasets to draw from the workflow prior and
-            simulator.
+        Args:
+            n_datasets: Number of simulated datasets to draw from the
+                workflow prior and simulator.
 
-        Returns
-        -------
-        Mapping[str, numpy.ndarray]
-            Simulated data and parameter truth arrays using the workflow's
-            data-shape contract.
+        Returns:
+            Mapping[str, numpy.ndarray]: Simulated data and parameter truth
+                arrays using the workflow's data-shape contract.
         """
 
-        return self.workflow.simulate(n_datasets)
+        with runtime_device(getattr(self, "device", "cpu")):
+            return self.workflow.simulate(n_datasets)
 
     def sample_posterior(
         self,
@@ -662,37 +641,36 @@ class SimpleWorkflow:
     ) -> Mapping[str, np.ndarray]:
         """Draw posterior samples for this simple workflow.
 
-        Parameters
-        ----------
-        test_data
-            Observed or simulated data dictionary passed to the trained
-            BayesFlow workflow. In examples this is often created with
-            ``model.simulate(n_datasets)``.
-        num_samples
-            Number of posterior draws to request for each dataset.
-        approximator_kwargs
-            Optional keyword arguments forwarded to BayesFlow's
-            ``workflow.sample`` method.
-        sample_batch_size
-            Optional number of datasets to sample at once. Use this when many
-            datasets would otherwise exceed accelerator memory.
+        Args:
+            test_data: Observed or simulated data dictionary passed to the
+                trained BayesFlow workflow. In examples this is often created with
+                the workflow object's ``simulate(n_datasets)`` method.
+            num_samples: Number of posterior draws to request for each
+                dataset.
+            approximator_kwargs: Optional keyword arguments forwarded to
+                BayesFlow's ``workflow.sample`` method.
+            sample_batch_size: Optional number of datasets to sample at once.
+                Use this when many datasets would otherwise exceed accelerator
+                memory.
 
-        Returns
-        -------
-        Mapping[str, numpy.ndarray]
-            Posterior draws on the public parameter scale. The sample axis is
-            the same as BayesFlow's output, usually axis 1 for batched data.
+        Returns:
+            Mapping[str, numpy.ndarray]: Posterior draws on the public
+                parameter scale. The sample axis is usually axis 1 for batched data.
         """
 
         from bami.workflows._sampling import _sample_posterior
 
-        return _sample_posterior(
-            workflow=self.workflow,
-            test_data=test_data,
-            num_samples=num_samples,
-            approximator_kwargs=approximator_kwargs,
-            sample_batch_size=sample_batch_size,
-        )
+        with runtime_device(getattr(self, "device", "cpu")):
+            with _suppress_singleton_softmax_warning(
+                getattr(self, "observation", None) == "aggregate"
+            ):
+                return _sample_posterior(
+                    workflow=self.workflow,
+                    test_data=test_data,
+                    num_samples=num_samples,
+                    approximator_kwargs=approximator_kwargs,
+                    sample_batch_size=sample_batch_size,
+                )
 
     def plot_parameter_recovery(
         self,
@@ -701,6 +679,9 @@ class SimpleWorkflow:
         params: str | Sequence[str] | None = None,
         metrics: str | Sequence[str] = "corr",
         n_cols: int = 3,
+        sample_batch_size: int = 10,
+        recovery_batch_size: int = 10,
+        show_progress: bool = True,
     ):
         """Plot parameter recovery for this simple workflow.
 
@@ -709,38 +690,45 @@ class SimpleWorkflow:
         against posterior means. It is intended for diagnosing one fitted model,
         not for comparing multiple models.
 
-        Parameters
-        ----------
-        n_datasets
-            Number of simulated datasets used for the diagnostic plot.
-        num_samples
-            Number of posterior draws per simulated dataset.
-        params
-            Optional parameter name or names to plot. By default all public
-            inferred parameters with both simulated truth and posterior samples
-            are shown.
-        metrics
-            Metric name or names shown in each panel title. Supported values
-            are ``corr``, ``ccc``, and ``rmse``.
-        n_cols
-            Maximum number of columns in the plot grid.
+        Args:
+            n_datasets: Number of simulated datasets used for the diagnostic
+                plot.
+            num_samples: Number of posterior draws per simulated dataset.
+            params: Optional parameter name or names to plot. By default all
+                public inferred parameters with both simulated truth and posterior
+                samples are shown.
+            metrics: Metric name or names shown in each panel title.
+                Supported values are ``corr``, ``ccc``, and ``rmse``.
+            n_cols: Maximum number of columns in the plot grid.
+            sample_batch_size: BayesFlow posterior sampling mini-batch size.
+                Larger values usually reduce sampling overhead; lower this
+                value if a diagnostic run exceeds available memory.
+            recovery_batch_size: Number of recovery datasets simulated and
+                sampled per chunk. Smaller values reduce peak memory use.
+            show_progress: Whether to show one BAMI progress bar while scoring
+                recovery datasets. BayesFlow's internal sampling output is hidden.
 
-        Returns
-        -------
-        matplotlib.figure.Figure
-            Parameter recovery figure.
+        Returns:
+            matplotlib.figure.Figure: Parameter recovery figure.
         """
 
         from bami.evaluation.diagnostics import plot_parameter_recovery
 
-        return plot_parameter_recovery(
-            self,
-            n_datasets=n_datasets,
-            num_samples=num_samples,
-            params=params,
-            metrics=metrics,
-            n_cols=n_cols,
-        )
+        with runtime_device(getattr(self, "device", "cpu")):
+            with _suppress_singleton_softmax_warning(
+                getattr(self, "observation", None) == "aggregate"
+            ):
+                return plot_parameter_recovery(
+                    self,
+                    n_datasets=n_datasets,
+                    num_samples=num_samples,
+                    params=params,
+                    metrics=metrics,
+                    n_cols=n_cols,
+                    sample_batch_size=sample_batch_size,
+                    recovery_batch_size=recovery_batch_size,
+                    show_progress=show_progress,
+                )
 
     def train_workflow(
         self,
@@ -753,79 +741,71 @@ class SimpleWorkflow:
         min_delta=0.1,
         workers=1,
         max_queue_size=4,
-        torch_device=None,
         verbose=1,
         file=None,
         overwrite=False,
         **kwargs,
-    ):
+    ) -> object | dict:
         """Train the workflow with optional saved-workflow handling.
 
-        Parameters
-        ----------
-        max_epochs, initial_epochs
-            Maximum and initial training epochs.
-        n_batch, batch_size
-            Online simulation batches per epoch and datasets per batch.
-        validation_data
-            Integer validation-set size or a pre-simulated validation dict.
-        patience, min_delta
-            Early-stopping controls based on validation loss.
-        workers
-            Number of Keras data-loading workers for online simulation batches.
-        max_queue_size
-            Maximum queue length for prefetched simulation batches.
-        torch_device
-            Torch default device to use during training, such as ``"mps"`` or
-            ``"cpu"``. Unavailable accelerators fall back to CPU.
-        verbose
-            Training log verbosity level passed to Keras.
-        file
-            Optional saved workflow file. When supplied, existing weights are
-            loaded by default and new weights are saved after fitting.
-        overwrite
-            Whether to refit and overwrite ``file`` when the saved workflow
-            file already exists.
-        **kwargs
-            Additional keyword arguments passed to ``workflow.fit_online``.
+        Args:
+            max_epochs (int): Maximum number of training epochs.
+            initial_epochs (int): Number of epochs in the first training block.
+            n_batch (int): Online simulation batches per epoch.
+            batch_size (int): Simulated datasets per online batch.
+            validation_data (int | Mapping | None): Integer validation-set size or a pre-simulated
+                validation dictionary.
+            patience (int): Early-stopping patience based on validation loss.
+            min_delta (float): Minimum validation-loss improvement counted as
+                progress.
+            workers (int): Number of Keras data-loading workers for online
+                simulation batches.
+            max_queue_size (int): Maximum queue length for prefetched simulation
+                batches.
+            verbose (int): Training log verbosity level passed to Keras.
+            file (str | pathlib.Path | None): Optional saved workflow file. Existing weights are loaded
+                by default, and new weights are saved after fitting.
+            overwrite (bool): Whether to refit and overwrite ``file`` when the saved
+                workflow file already exists.
+            **kwargs (Any): Additional keyword arguments passed to
+                ``workflow.fit_online``.
 
-        Returns
-        -------
-        object or dict
-            BayesFlow training history, or ``{"loaded": True, "file": path}``
-            when an existing saved workflow file is reused.
+        Returns:
+            object | dict: BayesFlow training history, or
+                ``{"loaded": True, "file": path}`` when an existing saved workflow
+                file is reused.
         """
 
-        return training.train_workflow(
-            self,
-            max_epochs=max_epochs,
-            initial_epochs=initial_epochs,
-            n_batch=n_batch,
-            batch_size=batch_size,
-            validation_data=validation_data,
-            patience=patience,
-            min_delta=min_delta,
-            workers=workers,
-            max_queue_size=max_queue_size,
-            torch_device=torch_device,
-            verbose=verbose,
-            file=file,
-            overwrite=overwrite,
-            **kwargs,
-        )
+        with runtime_device(getattr(self, "device", "cpu")):
+            with _suppress_singleton_softmax_warning(
+                getattr(self, "observation", None) == "aggregate"
+            ):
+                return training.train_workflow(
+                    self,
+                    max_epochs=max_epochs,
+                    initial_epochs=initial_epochs,
+                    n_batch=n_batch,
+                    batch_size=batch_size,
+                    validation_data=validation_data,
+                    patience=patience,
+                    min_delta=min_delta,
+                    workers=workers,
+                    max_queue_size=max_queue_size,
+                    verbose=verbose,
+                    file=file,
+                    overwrite=overwrite,
+                    **kwargs,
+                )
 
     def _resolve_validation_data(self, validation_data: int | dict) -> dict:
         """Return validation data for training.
 
-        Parameters
-        ----------
-        validation_data
-            Integer validation-set size or a pre-simulated validation dict.
+        Args:
+            validation_data (int | Mapping | None):
+                Integer validation-set size or a pre-simulated validation dict.
 
-        Returns
-        -------
-        dict
-            BayesFlow validation data dictionary.
+        Returns:
+            dict: BayesFlow validation data dictionary.
         """
 
         if isinstance(validation_data, dict):
@@ -845,17 +825,14 @@ class SimpleWorkflow:
     def _check_positive_int(value, name: str) -> int:
         """Validate a positive integer setting.
 
-        Parameters
-        ----------
-        value
-            Candidate integer.
-        name
-            Setting name used in error messages.
+        Args:
+            value:
+                Candidate integer.
+            name:
+                Setting name used in error messages.
 
-        Returns
-        -------
-        int
-            Positive integer value.
+        Returns:
+            int: Positive integer value.
         """
 
         checked = int(value)
@@ -867,17 +844,14 @@ class SimpleWorkflow:
     def _check_range(cls, value: Sequence[int], name: str) -> tuple[int, int]:
         """Validate a two-value integer range.
 
-        Parameters
-        ----------
-        value
-            Candidate range with lower and exclusive upper bounds.
-        name
-            Setting name used in error messages.
+        Args:
+            value:
+                Candidate range with lower and exclusive upper bounds.
+            name:
+                Setting name used in error messages.
 
-        Returns
-        -------
-        tuple[int, int]
-            Validated range.
+        Returns:
+            tuple[int, int]: Validated range.
         """
 
         try:

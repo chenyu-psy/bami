@@ -108,21 +108,22 @@ Completed for the current simple SDM and hierarchical ezDM examples.
   total computation, memory use, validation stability, and concurrent
   simulation/prefetching.
 - Backend/device support is now documented explicitly: current `bami` workflows
-  use the BayesFlow/Keras Torch backend, and `torch_device` controls only Torch
-  device selection. TensorFlow and JAX backends are not part of the current
-  tested workflow contract.
+  use the BayesFlow/Keras Torch backend, and device placement is a workflow-level
+  runtime setting through `device="cpu"`, `device="mps"`, or `device="cuda"`.
+  TensorFlow and JAX backends are not part of the current tested workflow
+  contract.
 - Static cross-platform portability audit has been recorded instead of
   requiring real macOS/Linux/Windows hardware runs. The audit checked for
   hard-coded absolute user paths, OS-specific shell commands, platform-specific
   Python branches, multiprocessing/fork assumptions, and Torch device
   assumptions.
-- The current audit found no macOS-only runtime dependency. `mps` is checked
-  only when users explicitly request `torch_device="mps"`, and unavailable
-  accelerators fall back to CPU. The Torch backend is an intentional current
+- The current audit found no macOS-only runtime dependency. CPU is the default
+  device across platforms, and `mps` or `cuda` are used only when users opt in
+  while constructing the workflow. The Torch backend is an intentional current
   support boundary rather than an accidental platform dependency.
-- `configure_torch_device(...)` now validates device names before calling
-  Torch, so unsupported values such as `"gpu"` produce a bami-level error that
-  explains the supported Torch device choices.
+- `validate_device(...)` now validates workflow device names before model
+  lifecycle calls, so unsupported values such as `"gpu"` produce a bami-level
+  error that explains the supported device choices.
 
 ## Current Milestone Acceptance Criteria
 
@@ -208,40 +209,140 @@ should be implemented before adding the new multi-condition workflow.
 
 ## Milestone 0.2.2: BayesFlow-Ind Compatibility and Validation
 
+Completed for version `0.2.2`.
+
 This milestone matches `bami` to the `2026-bayesflow-Ind` project workflow,
 then debugs and validates the current package before new 0.3.0 features begin.
 
 ### 1. Match the Target Workflow
 
-- Review the relevant `2026-bayesflow-Ind` usage patterns and expected workflow
-  behavior.
-- Compare those expectations against the current `bami` simple, hierarchical,
-  training, sampling, posterior-dataframe, and subject-truth contracts.
-- Record any mismatch as a concrete task with affected files, expected
-  behavior, and a minimal test case.
+- Reviewed the relevant `2026-bayesflow-Ind` usage patterns and expected
+  workflow behavior.
+- Compared those expectations against the current `bami` simple,
+  hierarchical, training, sampling, posterior-dataframe, and subject-truth
+  contracts.
+- Recorded and resolved compatibility mismatches as concrete tasks with
+  affected files, expected behavior, and regression tests.
 
 ### 2. Debug and Fix Compatibility Bugs
 
-- Fix bugs exposed by matching `bami` to `2026-bayesflow-Ind`.
-- Prefer small, focused fixes that preserve the 0.2.1 workflow-wide contracts.
-- Do not start `MultiConditionWorkflow` implementation while compatibility bugs
-  from this milestone remain unresolved.
+- Fixed bugs exposed by matching `bami` to `2026-bayesflow-Ind`.
+- Used small, focused fixes that preserve the 0.2.1 workflow-wide contracts.
+- Completed these compatibility fixes before starting `MultiConditionWorkflow`
+  implementation.
+- Fixed Apple Silicon MPS training compatibility for BayesFlow/Keras Torch
+  workflows. When users construct a workflow with `device="mps"` and MPS is
+  available, `runtime_device(...)` now enables PyTorch's CPU fallback for
+  unsupported MPS operations while still selecting MPS for supported
+  operations.
+- The fallback environment variable is initialized during `bami` package import
+  so it is present before BayesFlow, Keras, or Torch initialize their backend.
+- Unavailable `mps` and `cuda` requests fail during workflow construction so
+  users do not unknowingly train or sample on a different device than requested.
+- Optimized `HierarchicalWorkflow.sample_random_posterior(...)` for
+  BayesFlow-Ind-style hierarchical random-effect recovery. The public method
+  name and return contract are unchanged, but the implementation now delegates
+  to private workflow sampling helpers that call BayesFlow
+  `ancestral_sample(...)` with subject data and group posterior draws passed as
+  separate condition sets. This avoids the old Python/NumPy expansion of every
+  `dataset x subject x group_draw` row before BayesFlow sampling.
+- Kept `sample_random_posterior(...)` as a shallow workflow wrapper and moved
+  the reusable random posterior sampling implementation into
+  `bami.workflows._sampling`, keeping `evaluation` focused on diagnostics and
+  metrics.
+- Updated `plot_random_recovery(...)` for both the workflow alias and
+  `bami.evaluation.diagnostics.plot_random_recovery(...)` so the diagnostic
+  processes one simulated dataset at a time, computes dataset-level recovery
+  rows immediately, and discards posterior samples before moving to the next
+  dataset. Recovery plotting now exposes `sample_batch_size=100` for BayesFlow
+  posterior sampling mini-batches; this can improve throughput when memory is
+  available without changing the dataset-level recovery loop.
+- Updated the hierarchical random-effect workflow to standardize all
+  random-stage BayesFlow inputs: standardized subject deviations
+  (`inference_variables`), observed subject data (`summary_variables`), and raw
+  group parameters (`inference_conditions`). This is a generic
+  `HierarchicalWorkflow` fix, not a model-specific SDM workaround, and existing
+  saved random workflow files need retraining before they use the new
+  standardization.
 
 ### 3. Validation
 
-- Add regression tests for every compatibility bug that is fixed.
-- Validate at least one representative simple workflow and one representative
-  hierarchical workflow from the target usage pattern.
-- Run the full check set after fixes:
-  `uv run pytest`, `uv run ruff check .`, `uv run black --check .`, and
-  `uv run mkdocs build`.
-- Record any unresolved compatibility gap with exact reproduction steps before
-  starting 0.3.0 work.
+- Added regression tests for every compatibility bug fixed in this milestone.
+- Validated representative simple and hierarchical workflows from the target
+  usage pattern.
+- Added runtime regression tests for available MPS with CPU fallback,
+  unavailable MPS fallback, unavailable CUDA fallback, explicit CPU selection,
+  and invalid device-name errors.
+- Added regression coverage for the optimized random posterior route,
+  including paired group draws, fixed group components, fixed and flexible
+  trial data, ragged trial input, pre-padded masked trial input, and validation
+  of too-many-trials errors.
+- Added random recovery diagnostic coverage for one-dataset-at-a-time
+  processing, the lower `num_samples=100` default, and `sample_batch_size`
+  forwarding to both group and random posterior sampling calls.
+- Added regression coverage that builds a random workflow and checks that the
+  BayesFlow standardizer contains `inference_variables`, `summary_variables`,
+  and `inference_conditions`.
+- Targeted validation for the random-workflow standardization change passed:
+  `uv run pytest tests/test_fixed_hierarchy.py tests/test_evaluation_metrics_bayesflow.py`
+  in the `bami` package, and
+  `uv run python -m pytest tests/test_evaluation_metrics_bayesflow.py tests/test_fixed_hierarchy.py tests/test_ezdm_hierarchy.py tests/test_qmd_style.py`
+  in the `2026-bayesflow-Ind` analysis project. The external project command is
+  a historical validation record, not part of the current `bami` repository
+  check set.
+- Latest validation for these 0.2.2 changes passed:
+  `uv run pytest tests/test_evaluation_metrics_bayesflow.py`,
+  `uv run pytest`, `uv run ruff check`, and `uv build`. The full pytest run
+  reported only the existing Keras/Torch NumPy deprecation warnings.
+- Full release checks passed after fixes:
+  `uv run pytest`, `uv run ruff check .`, `uv run black --check .`,
+  `uv run mkdocs build`, and `uv build`.
+- No unresolved compatibility gaps are recorded for this milestone.
+
+## Milestone 0.2.3: Simple Aggregate Warning Cleanup
+
+Completed for the current `SimpleWorkflow` contract. This milestone addresses
+the user-facing singleton softmax warning seen during fixed-simple aggregate
+training, such as ezDM fixed-simple training in `2026-bayesflow-Ind`.
+
+### 1. Decision
+
+- Fixed-simple aggregate workflows produce singleton summary data shaped
+  `batch x 1 x features`.
+- `SimpleWorkflow` continues to use BayesFlow's built-in `DeepSet` summary
+  network. A temporary comparison against a custom aggregate MLP showed that
+  the MLP removed the warning and trained faster, but the existing `DeepSet`
+  gave better quick parameter-recovery correlations in the tested smoke runs.
+- The warning is benign for singleton aggregate data because DeepSet attention
+  is applying softmax over a set axis of length one. It is still confusing in
+  researcher-facing notebooks, so the package now suppresses only this specific
+  warning in the relevant simple aggregate paths.
+
+### 2. Implementation
+
+- Added a private warning context manager in `bami.workflows.simple` that
+  filters only the Keras message about softmax over an axis of size one.
+- Applied the filter only when `SimpleWorkflow.observation == "aggregate"` and
+  only around `train_workflow(...)`, `sample_posterior(...)`, and
+  `plot_parameter_recovery(...)`.
+- Kept notebook code unchanged and did not suppress warnings globally.
+- Kept simple trial workflows and hierarchical workflows unchanged.
+
+### 3. Validation
+
+- Added regression coverage that confirms the filter hides the singleton
+  softmax warning when enabled, leaves it visible when disabled, and does not
+  hide ordinary `UserWarning`s.
+- Focused tests passed in the `bami` package:
+  `KERAS_BACKEND=torch uv run pytest tests/test_fixed_simple_workflow.py tests/test_ezdm_fixed_simple.py tests/test_train_workflow_saved_workflow.py`.
+- A small ezDM aggregate train-and-sample smoke run from the analysis project
+  reported `softmax_warning_count=0` while preserving data shape `(4, 1, 3)`.
 
 ## Milestone 0.3.0: MultiConditionWorkflow
 
-Start this milestone only after 0.2.1 workflow-wide API alignment and 0.2.2
-BayesFlow-Ind compatibility validation are complete.
+Start this milestone only after 0.2.1 workflow-wide API alignment, 0.2.2
+BayesFlow-Ind compatibility validation, and 0.2.3 summary-network cleanup are
+complete.
 
 This milestone adds `MultiConditionWorkflow` for aggregate multi-condition
 hierarchical models. The workflow is parallel to `HierarchicalWorkflow`, not an
@@ -673,8 +774,8 @@ Completed.
 - Removed the old SDM degree-bin user interface, including `GRID_SIZE`,
   `grid_size`, `error_scale`, `jitter`, `sdm_probs`, and degree/index helper
   exports.
-- Updated SDM examples and fixtures to use `obs_names=["error_rad"]`, with
-  simulated and observed SDM data documented as radians in `[-pi, pi]`.
+- Updated SDM examples and fixtures to use `obs_names=["error"]`, with
+  continuous radian errors treated as the default SDM observation convention.
 - Aligned simulator navigation with the M3 and ezDM pages by exposing SDM as
   `SDM` and featuring only the workflow-facing simulator function.
 - Full `uv run pytest` passed with the existing Keras/Torch NumPy deprecation
