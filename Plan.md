@@ -299,38 +299,44 @@ then debugs and validates the current package before new 0.3.0 features begin.
 - Record any unresolved compatibility gap with exact reproduction steps before
   starting 0.3.0 work.
 
-## Milestone 0.2.3: Simple Workflow Summary-Network Cleanup
+## Milestone 0.2.3: Simple Aggregate Warning Cleanup
 
-This milestone addresses a user-facing warning in fixed-simple aggregate
-workflows before new 0.3.0 features begin.
+Completed for the current `SimpleWorkflow` contract. This milestone addresses
+the user-facing singleton softmax warning seen during fixed-simple aggregate
+training, such as ezDM fixed-simple training in `2026-bayesflow-Ind`.
 
-### 1. Singleton Aggregate Summary Warning
+### 1. Decision
 
 - Fixed-simple aggregate workflows produce singleton summary data shaped
   `batch x 1 x features`.
-- Current `SimpleWorkflow` uses `DeepSet` for all simple workflows.
-- BayesFlow/Keras can warn that softmax over a length-1 axis always returns 1.
-- The warning is benign for singleton aggregate data, but it is confusing
-  during ordinary notebook training, such as ezDM fixed-simple training.
+- `SimpleWorkflow` continues to use BayesFlow's built-in `DeepSet` summary
+  network. A temporary comparison against a custom aggregate MLP showed that
+  the MLP removed the warning and trained faster, but the existing `DeepSet`
+  gave better quick parameter-recovery correlations in the tested smoke runs.
+- The warning is benign for singleton aggregate data because DeepSet attention
+  is applying softmax over a set axis of length one. It is still confusing in
+  researcher-facing notebooks, so the package now suppresses only this specific
+  warning in the relevant simple aggregate paths.
 
-### 2. Intended Future Fix
+### 2. Implementation
 
-- Consider a dedicated single-row summary path for `SimpleWorkflow` when
-  `observation="aggregate"` and the workflow has fixed singleton rows.
-- Do not suppress the warning globally.
-- Preserve `DeepSet` for set-valued workflows, flexible trial workflows, and
-  hierarchical aggregate workflows.
-- Document saved-model compatibility implications if the architecture changes
-  and existing workflow files need retraining.
+- Added a private warning context manager in `bami.workflows.simple` that
+  filters only the Keras message about softmax over an axis of size one.
+- Applied the filter only when `SimpleWorkflow.observation == "aggregate"` and
+  only around `train_workflow(...)`, `sample_posterior(...)`, and
+  `plot_parameter_recovery(...)`.
+- Kept notebook code unchanged and did not suppress warnings globally.
+- Kept simple trial workflows and hierarchical workflows unchanged.
 
-### 3. Acceptance Criteria
+### 3. Validation
 
-- ezDM fixed-simple training no longer emits the singleton softmax warning.
-- Existing simple trial, flex simple, and hierarchy workflow contracts remain
-  unchanged.
-- Saved-model compatibility implications are documented if architecture changes
-  require retraining.
-- Regression tests cover the selected summary network behavior.
+- Added regression coverage that confirms the filter hides the singleton
+  softmax warning when enabled, leaves it visible when disabled, and does not
+  hide ordinary `UserWarning`s.
+- Focused tests passed in the `bami` package:
+  `KERAS_BACKEND=torch uv run pytest tests/test_fixed_simple_workflow.py tests/test_ezdm_fixed_simple.py tests/test_train_workflow_saved_workflow.py`.
+- A small ezDM aggregate train-and-sample smoke run from the analysis project
+  reported `softmax_warning_count=0` while preserving data shape `(4, 1, 3)`.
 
 ## Milestone 0.3.0: MultiConditionWorkflow
 

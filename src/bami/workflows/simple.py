@@ -10,6 +10,8 @@ hierarchy.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import contextmanager
+import warnings
 
 import numpy as np
 import bayesflow as bf
@@ -18,6 +20,44 @@ from bami.inputs import InputFormat
 from bami.inference.runtime import runtime_device, validate_device
 from bami.workflows import training
 from bami.workflows.contracts import validate_observation, validate_workflow_contract
+
+_SINGLETON_SOFTMAX_MESSAGE = (
+    r"You are using a softmax over axis .* of a tensor of shape .*"
+    r"This axis has size 1.*"
+)
+
+
+@contextmanager
+def _suppress_singleton_softmax_warning(enabled: bool):
+    """Hide the harmless DeepSet warning for one-row aggregate summaries.
+
+    Simple aggregate workflows pass one summary row per simulated dataset into
+    BayesFlow's DeepSet. Its attention pooling therefore applies softmax over a
+    set axis of size one. The operation is harmless but otherwise clutters
+    researcher-facing training and sampling logs.
+
+    Args:
+        enabled: Whether to suppress the singleton softmax warning inside this
+            context. Trial-level workflows pass ``False`` so their warnings stay
+            visible.
+
+    Yields:
+        None. Code inside the context runs with only this specific warning
+        filtered.
+    """
+
+    if not enabled:
+        yield
+        return
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=_SINGLETON_SOFTMAX_MESSAGE,
+            category=UserWarning,
+            module=r"keras\.src\.ops\.nn",
+        )
+        yield
 
 
 class SimpleWorkflow:
@@ -621,13 +661,16 @@ class SimpleWorkflow:
         from bami.workflows._sampling import _sample_posterior
 
         with runtime_device(getattr(self, "device", "cpu")):
-            return _sample_posterior(
-                workflow=self.workflow,
-                test_data=test_data,
-                num_samples=num_samples,
-                approximator_kwargs=approximator_kwargs,
-                sample_batch_size=sample_batch_size,
-            )
+            with _suppress_singleton_softmax_warning(
+                getattr(self, "observation", None) == "aggregate"
+            ):
+                return _sample_posterior(
+                    workflow=self.workflow,
+                    test_data=test_data,
+                    num_samples=num_samples,
+                    approximator_kwargs=approximator_kwargs,
+                    sample_batch_size=sample_batch_size,
+                )
 
     def plot_parameter_recovery(
         self,
@@ -672,17 +715,20 @@ class SimpleWorkflow:
         from bami.evaluation.diagnostics import plot_parameter_recovery
 
         with runtime_device(getattr(self, "device", "cpu")):
-            return plot_parameter_recovery(
-                self,
-                n_datasets=n_datasets,
-                num_samples=num_samples,
-                params=params,
-                metrics=metrics,
-                n_cols=n_cols,
-                sample_batch_size=sample_batch_size,
-                recovery_batch_size=recovery_batch_size,
-                show_progress=show_progress,
-            )
+            with _suppress_singleton_softmax_warning(
+                getattr(self, "observation", None) == "aggregate"
+            ):
+                return plot_parameter_recovery(
+                    self,
+                    n_datasets=n_datasets,
+                    num_samples=num_samples,
+                    params=params,
+                    metrics=metrics,
+                    n_cols=n_cols,
+                    sample_batch_size=sample_batch_size,
+                    recovery_batch_size=recovery_batch_size,
+                    show_progress=show_progress,
+                )
 
     def train_workflow(
         self,
@@ -731,22 +777,25 @@ class SimpleWorkflow:
         """
 
         with runtime_device(getattr(self, "device", "cpu")):
-            return training.train_workflow(
-                self,
-                max_epochs=max_epochs,
-                initial_epochs=initial_epochs,
-                n_batch=n_batch,
-                batch_size=batch_size,
-                validation_data=validation_data,
-                patience=patience,
-                min_delta=min_delta,
-                workers=workers,
-                max_queue_size=max_queue_size,
-                verbose=verbose,
-                file=file,
-                overwrite=overwrite,
-                **kwargs,
-            )
+            with _suppress_singleton_softmax_warning(
+                getattr(self, "observation", None) == "aggregate"
+            ):
+                return training.train_workflow(
+                    self,
+                    max_epochs=max_epochs,
+                    initial_epochs=initial_epochs,
+                    n_batch=n_batch,
+                    batch_size=batch_size,
+                    validation_data=validation_data,
+                    patience=patience,
+                    min_delta=min_delta,
+                    workers=workers,
+                    max_queue_size=max_queue_size,
+                    verbose=verbose,
+                    file=file,
+                    overwrite=overwrite,
+                    **kwargs,
+                )
 
     def _resolve_validation_data(self, validation_data: int | dict) -> dict:
         """Return validation data for training.
