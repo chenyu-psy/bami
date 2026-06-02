@@ -209,30 +209,32 @@ should be implemented before adding the new multi-condition workflow.
 
 ## Milestone 0.2.2: BayesFlow-Ind Compatibility and Validation
 
+Completed for version `0.2.2`.
+
 This milestone matches `bami` to the `2026-bayesflow-Ind` project workflow,
 then debugs and validates the current package before new 0.3.0 features begin.
 
 ### 1. Match the Target Workflow
 
-- Review the relevant `2026-bayesflow-Ind` usage patterns and expected workflow
-  behavior.
-- Compare those expectations against the current `bami` simple, hierarchical,
-  training, sampling, posterior-dataframe, and subject-truth contracts.
-- Record any mismatch as a concrete task with affected files, expected
-  behavior, and a minimal test case.
+- Reviewed the relevant `2026-bayesflow-Ind` usage patterns and expected
+  workflow behavior.
+- Compared those expectations against the current `bami` simple,
+  hierarchical, training, sampling, posterior-dataframe, and subject-truth
+  contracts.
+- Recorded and resolved compatibility mismatches as concrete tasks with
+  affected files, expected behavior, and regression tests.
 
 ### 2. Debug and Fix Compatibility Bugs
 
-- Fix bugs exposed by matching `bami` to `2026-bayesflow-Ind`.
-- Prefer small, focused fixes that preserve the 0.2.1 workflow-wide contracts.
-- Do not start `MultiConditionWorkflow` implementation while compatibility bugs
-  from this milestone remain unresolved.
+- Fixed bugs exposed by matching `bami` to `2026-bayesflow-Ind`.
+- Used small, focused fixes that preserve the 0.2.1 workflow-wide contracts.
+- Completed these compatibility fixes before starting `MultiConditionWorkflow`
+  implementation.
 - Fixed Apple Silicon MPS training compatibility for BayesFlow/Keras Torch
   workflows. When users construct a workflow with `device="mps"` and MPS is
   available, `runtime_device(...)` now enables PyTorch's CPU fallback for
-  unsupported MPS operations. This handles Keras orthogonal initializer QR
-  operations such as `aten::linalg_qr.out`, while still selecting MPS for
-  supported operations.
+  unsupported MPS operations while still selecting MPS for supported
+  operations.
 - The fallback environment variable is initialized during `bami` package import
   so it is present before BayesFlow, Keras, or Torch initialize their backend.
 - Unavailable `mps` and `cuda` requests fail during workflow construction so
@@ -265,15 +267,12 @@ then debugs and validates the current package before new 0.3.0 features begin.
 
 ### 3. Validation
 
-- Add regression tests for every compatibility bug that is fixed.
-- Validate at least one representative simple workflow and one representative
-  hierarchical workflow from the target usage pattern.
+- Added regression tests for every compatibility bug fixed in this milestone.
+- Validated representative simple and hierarchical workflows from the target
+  usage pattern.
 - Added runtime regression tests for available MPS with CPU fallback,
   unavailable MPS fallback, unavailable CUDA fallback, explicit CPU selection,
   and invalid device-name errors.
-- Verified the MPS fallback path with a small Keras `Orthogonal()` initializer
-  smoke test under `runtime_device("mps")`; the initializer completed with
-  `PYTORCH_ENABLE_MPS_FALLBACK=1`.
 - Added regression coverage for the optimized random posterior route,
   including paired group draws, fixed group components, fixed and flexible
   trial data, ragged trial input, pre-padded masked trial input, and validation
@@ -288,16 +287,17 @@ then debugs and validates the current package before new 0.3.0 features begin.
   `uv run pytest tests/test_fixed_hierarchy.py tests/test_evaluation_metrics_bayesflow.py`
   in the `bami` package, and
   `uv run python -m pytest tests/test_evaluation_metrics_bayesflow.py tests/test_fixed_hierarchy.py tests/test_ezdm_hierarchy.py tests/test_qmd_style.py`
-  in the `2026-bayesflow-Ind` analysis project.
+  in the `2026-bayesflow-Ind` analysis project. The external project command is
+  a historical validation record, not part of the current `bami` repository
+  check set.
 - Latest validation for these 0.2.2 changes passed:
   `uv run pytest tests/test_evaluation_metrics_bayesflow.py`,
   `uv run pytest`, `uv run ruff check`, and `uv build`. The full pytest run
   reported only the existing Keras/Torch NumPy deprecation warnings.
-- Run the full check set after fixes:
-  `uv run pytest`, `uv run ruff check .`, `uv run black --check .`, and
-  `uv run mkdocs build`.
-- Record any unresolved compatibility gap with exact reproduction steps before
-  starting 0.3.0 work.
+- Full release checks passed after fixes:
+  `uv run pytest`, `uv run ruff check .`, `uv run black --check .`,
+  `uv run mkdocs build`, and `uv build`.
+- No unresolved compatibility gaps are recorded for this milestone.
 
 ## Milestone 0.2.3: Simple Aggregate Warning Cleanup
 

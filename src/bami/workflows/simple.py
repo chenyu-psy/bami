@@ -69,7 +69,7 @@ class SimpleWorkflow:
 
     Args:
         name: Short model name attached to the BayesFlow workflow.
-        param_names: Public parameter names used by the model.
+        param_names: Public parameter names used by this workflow.
         priors: Prior specification passed to ``draw_prior_with_raw``.
         simulator: Function called as
             ``simulator(**params, n_trials=..., rng=..., **simulator_kwargs)``.
@@ -644,7 +644,7 @@ class SimpleWorkflow:
         Args:
             test_data: Observed or simulated data dictionary passed to the
                 trained BayesFlow workflow. In examples this is often created with
-                ``model.simulate(n_datasets)``.
+                the workflow object's ``simulate(n_datasets)`` method.
             num_samples: Number of posterior draws to request for each
                 dataset.
             approximator_kwargs: Optional keyword arguments forwarded to

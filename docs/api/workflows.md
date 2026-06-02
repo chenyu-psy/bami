@@ -226,11 +226,12 @@ history = model.train_workflow(
 posterior = model.sample_posterior(test_data=sim, num_samples=500)
 ```
 
-`model.simulate(...)` generates prior-predictive data using the workflow's
+The `simulate(...)` method generates prior-predictive data using the workflow's
 data-shape contract. The `train_workflow(...)` method fits the workflow and can
 load or save a trained workflow file. Simple workflows use
-`model.sample_posterior(...)` for posterior draws; hierarchical workflows use
-`model.sample_group_posterior(...)` for group-level posterior draws.
+`SimpleWorkflow.sample_posterior(...)` for posterior draws; hierarchical
+workflows use `HierarchicalWorkflow.sample_group_posterior(...)` for group-level
+posterior draws.
 
 For hierarchical subject-level parameters, train the random-effect workflow
 separately. By default it inherits the training settings saved by
@@ -256,13 +257,13 @@ estimates = model.estimate_random_parameter(
 ```
 
 The training call returns `None` and stores the trained or loaded estimator on
-`model.random_estimator`. Call `estimate_random_parameter(...)` to get point
-estimates in a `pandas.DataFrame`, not posterior draws. By default, the table
-contains only `dataset_id`, `subject_id`, and public parameter estimates. Use
-`include_scales=True` to add raw, group-centered deviation, and standardized
-z-scale columns for diagnostic work. `model.plot_random_recovery(...)` uses
-this estimator path. Do not use estimator output for posterior intervals or
-coverage checks.
+the workflow object's `random_estimator` attribute. Call
+`estimate_random_parameter(...)` to get point estimates in a `pandas.DataFrame`,
+not posterior draws. By default, the table contains only `dataset_id`,
+`subject_id`, and public parameter estimates. Use `include_scales=True` to add
+raw, group-centered deviation, and standardized z-scale columns for diagnostic
+work. `HierarchicalWorkflow.plot_random_recovery(...)` uses this estimator
+path. Do not use estimator output for posterior intervals or coverage checks.
 
 By default, `train_random_estimator(...)` uses `sigma_values=None`. This chooses
 parameter-specific low, mid, and high group-sigma values from the model's group

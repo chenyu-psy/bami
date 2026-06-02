@@ -1591,7 +1591,7 @@ class HierarchicalWorkflow:
         Args:
             test_data: Observed or simulated hierarchy data dictionary passed
                 to the trained BayesFlow workflow. Often created with
-                ``model.simulate(n_datasets)``.
+                the workflow object's ``simulate(n_datasets)`` method.
             num_samples: Number of group-level posterior draws to request for
                 each dataset.
             approximator_kwargs: Optional keyword arguments forwarded to
@@ -2188,11 +2188,11 @@ class HierarchicalWorkflow:
         Args:
             observed_data (Mapping | numpy.ndarray | Sequence): One or more observed subjects using this
                 workflow's observation contract. A full group data dictionary from
-                ``model.simulate`` is also accepted.
+                this workflow object's ``simulate(...)`` method is also accepted.
             group_samples: Group posterior samples from
-                ``model.sample_group_posterior``. Raw group keys such as
-                ``theta_mu_raw`` and ``theta_log_sigma`` are required because they
-                define the shrinkage transform.
+                ``HierarchicalWorkflow.sample_group_posterior(...)``. Raw group
+                keys such as ``theta_mu_raw`` and ``theta_log_sigma`` are
+                required because they define the shrinkage transform.
             approximator_kwargs: Optional keyword arguments forwarded to the
                 random workflow's ``ancestral_sample`` method.
             sample_batch_size: Optional BayesFlow sampling batch size. Larger
@@ -2239,8 +2239,8 @@ class HierarchicalWorkflow:
         This is the Route C recovery head. It estimates subject-level
         parameters from observed subject data and group raw parameters, but it
         does not return posterior draws or calibrated uncertainty intervals.
-        Use the legacy ``train_random_workflow`` method when posterior draws are
-        required.
+        Use the legacy posterior workflow only when posterior draws are
+        required instead of point estimates.
 
         Args:
             file: Optional ``.pt`` checkpoint. Existing checkpoints are loaded

@@ -12,10 +12,12 @@ Most analyses need one or both levels:
 Use model-level sampling methods to draw posterior samples after training or
 loading a saved workflow. These methods keep the model object as the first
 thing researchers work with, instead of asking them to reach through
-`model.workflow`. They return dictionaries so downstream workflow steps can
-reuse raw posterior keys when needed.
+the underlying BayesFlow workflow. They are instance methods on fitted workflow
+objects; your analysis script can name the object however you like. They return
+dictionaries so downstream workflow steps can reuse raw posterior keys when
+needed.
 
-For simple workflows, call `model.sample_posterior(...)`:
+For simple workflows, call `SimpleWorkflow.sample_posterior(...)`:
 
 ::: bami.workflows.simple.SimpleWorkflow.sample_posterior
     options:
@@ -31,8 +33,9 @@ samples = model.sample_posterior(
 )
 ```
 
-For hierarchical workflows, call `model.sample_group_posterior(...)` when you
-want group-level posterior draws:
+For hierarchical workflows, call
+`HierarchicalWorkflow.sample_group_posterior(...)` when you want group-level
+posterior draws:
 
 ::: bami.workflows.hierarchical.HierarchicalWorkflow.sample_group_posterior
     options:
@@ -49,10 +52,10 @@ group_samples = model.sample_group_posterior(
 ```
 
 The workflow applies its public-scale posterior conversion through
-`model.convert_posterior(...)` when one is configured, so returned samples use
-the parameter names and scales researchers normally interpret. Raw keys remain
-available in the same dictionary for workflow steps such as random-effect
-sampling.
+the configured `convert_posterior(...)` method when one is available, so
+returned samples use the parameter names and scales researchers normally
+interpret. Raw keys remain available in the same dictionary for workflow steps
+such as random-effect sampling.
 
 To make a tidy dataframe for reporting, convert the sample dictionary
 explicitly:
@@ -72,14 +75,15 @@ The dataframe columns are `dataset`, `draw`, `level`, `param`, `basis`,
 
 ## Random-effect subject parameters
 
-Hierarchical workflows can also train a separate random-effect workflow for
-individual subjects. This workflow estimates standardized subject deviations
-and combines them with group posterior draws, so group shrinkage remains part
-of the estimate.
+Hierarchical workflows can also train a deterministic random-effect estimator
+for individual subjects. This estimator combines observed subject data with
+group posterior draws, so group shrinkage remains part of the subject-level
+estimate. It returns point estimates, not posterior draws or calibrated
+uncertainty intervals.
 
 Train it separately from the group workflow:
 
-::: bami.workflows.hierarchical.HierarchicalWorkflow.train_random_workflow
+::: bami.workflows.hierarchical.HierarchicalWorkflow.train_random_estimator
     options:
       show_root_heading: true
       show_root_toc_entry: false
@@ -87,12 +91,13 @@ Train it separately from the group workflow:
 
 ```python
 model.train_workflow(file="saved_workflows/ezdm_group.keras")
-model.train_random_workflow(file="saved_workflows/ezdm_random.keras")
+model.train_random_estimator(file="saved_workflows/ezdm_random_estimator.pt")
 ```
 
-Then sample group parameters and subject parameters in two explicit steps:
+Then sample group parameters and estimate subject parameters in two explicit
+steps:
 
-::: bami.workflows.hierarchical.HierarchicalWorkflow.sample_random_posterior
+::: bami.workflows.hierarchical.HierarchicalWorkflow.estimate_random_parameter
     options:
       show_root_heading: true
       show_root_toc_entry: false
@@ -104,18 +109,21 @@ group_samples = model.sample_group_posterior(
     num_samples=500,
 )
 
-subject_samples = model.sample_random_posterior(
+subject_estimates = model.estimate_random_parameter(
     observed_data=subject_data,
     group_samples=group_samples,
 )
 ```
 
-`observed_data` may contain one subject or many subjects. The returned subject
-sample arrays keep shape `(n_datasets, n_samples, n_subjects)`.
+`observed_data` may contain one subject or many subjects. The returned
+`pandas.DataFrame` has one row per active subject. By default, it contains
+`dataset_id`, `subject_id`, and public parameter estimates. Use
+`include_scales=True` to add raw, group-centered deviation, standardized `z`,
+and group-scale diagnostic columns.
 
-For trial-level workflows, trial-count handling comes from the model. Fixed
-trial models issue a warning if observed subjects use a different trial count
-than the training `n_trials`, because the resulting subject posteriors may be
-less reliable. Flexible trial models accept raw variable-length subject trial
+For trial-level workflows, trial-count handling comes from the workflow object.
+Fixed trial models issue a warning if observed subjects use a different trial
+count than the training `n_trials`, because the resulting subject posteriors may
+be less reliable. Flexible trial models accept raw variable-length subject trial
 arrays and add the padding and `active_trial` mask internally, as long as the
 observed trial counts fit inside `n_trials_range`.

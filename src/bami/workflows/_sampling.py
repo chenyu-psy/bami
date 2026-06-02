@@ -1,8 +1,9 @@
 """Internal posterior sampling helpers for workflow methods.
 
 This module is intentionally private. User-facing code should call model-level
-methods such as ``model.sample_posterior(...)`` or
-``model.sample_group_posterior(...)`` instead of importing helpers from here.
+methods such as ``SimpleWorkflow.sample_posterior(...)`` or
+``HierarchicalWorkflow.sample_group_posterior(...)`` instead of importing
+helpers from here.
 """
 
 from __future__ import annotations
@@ -71,7 +72,8 @@ def _sample_random_posterior(
         observed_data:
             One or more observed subjects using the model's observation contract.
         group_samples:
-            Group posterior samples returned by ``model.sample_group_posterior``.
+            Group posterior samples returned by
+            ``HierarchicalWorkflow.sample_group_posterior(...)``.
         approximator_kwargs:
             Optional keyword arguments forwarded to BayesFlow's
             ``ancestral_sample`` method.
