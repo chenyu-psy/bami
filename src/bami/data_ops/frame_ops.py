@@ -10,15 +10,12 @@ import polars as pl
 def drop_non_parameter_columns(df: pl.DataFrame) -> pl.DataFrame:
     """Drop non-parameter columns used in simulated long-format exports.
 
-    Parameters
-    ----------
-    df : pl.DataFrame
-        Input table.
+    Args:
+        df: Input table.
 
-    Returns
-    -------
-    pl.DataFrame
-        Filtered table without `task` and `mean*` columns.
+    Returns:
+        polars.DataFrame: Filtered table without ``task`` and ``mean*``
+            columns.
     """
 
     keep_cols = [
@@ -30,15 +27,12 @@ def drop_non_parameter_columns(df: pl.DataFrame) -> pl.DataFrame:
 def add_participant_rank(df: pl.DataFrame) -> pl.DataFrame:
     """Add participant index by ranked `nPart` within simulation groups.
 
-    Parameters
-    ----------
-    df : pl.DataFrame
-        Long-format table containing `nPart`, `rep`, `nResp`, and `parameter`.
+    Args:
+        df: Long-format table containing ``nPart``, ``rep``, ``nResp``, and
+            ``parameter``.
 
-    Returns
-    -------
-    pl.DataFrame
-        Table with a new `participant` column.
+    Returns:
+        polars.DataFrame: Table with a new ``participant`` column.
     """
 
     return df.with_columns(
@@ -52,15 +46,11 @@ def add_participant_rank(df: pl.DataFrame) -> pl.DataFrame:
 def pivot_parameter_values(df: pl.DataFrame) -> pl.DataFrame:
     """Pivot long parameter values to wide format by parameter name.
 
-    Parameters
-    ----------
-    df : pl.DataFrame
-        Long-format input with `parameter` and `value` columns.
+    Args:
+        df: Long-format input with ``parameter`` and ``value`` columns.
 
-    Returns
-    -------
-    pl.DataFrame
-        Wide-format table.
+    Returns:
+        polars.DataFrame: Wide-format table.
     """
 
     return df.pivot(

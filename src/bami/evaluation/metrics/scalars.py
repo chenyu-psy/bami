@@ -10,17 +10,13 @@ import numpy as np
 def compute_corr(truth: np.ndarray, estimate: np.ndarray) -> float:
     """Compute Pearson correlation with simple safety checks.
 
-    Parameters
-    ----------
-    truth : np.ndarray
-        Ground-truth values.
-    estimate : np.ndarray
-        Point estimates aligned with truth.
+    Args:
+        truth: Ground-truth values.
+        estimate: Point estimates aligned with ``truth``.
 
-    Returns
-    -------
-    float
-        Pearson r, or NaN when variance is zero/insufficient.
+    Returns:
+        float: Pearson r, or NaN when the vectors are too short or either
+            vector has zero variance.
     """
 
     x = np.asarray(truth, dtype=float).reshape(-1)
@@ -38,23 +34,16 @@ def compute_corr(truth: np.ndarray, estimate: np.ndarray) -> float:
 def compute_ccc(truth: np.ndarray, estimate: np.ndarray) -> float:
     """Compute Lin's concordance correlation coefficient.
 
-    Parameters
-    ----------
-    truth : np.ndarray
-        Ground-truth values.
-    estimate : np.ndarray
-        Point estimates aligned with truth.
+    CCC is useful for parameter recovery because high Pearson correlation can
+    still hide estimates that are biased or compressed toward the mean.
 
-    Returns
-    -------
-    float
-        Concordance correlation coefficient, or NaN when it is undefined.
+    Args:
+        truth: Ground-truth values.
+        estimate: Point estimates aligned with ``truth``.
 
-    Notes
-    -----
-    CCC penalizes both weak association and poor agreement with the identity
-    line. It is useful for parameter recovery because high Pearson r can still
-    hide biased or compressed estimates.
+    Returns:
+        float: Concordance correlation coefficient, or NaN when it is
+            undefined.
     """
 
     x = np.asarray(truth, dtype=float).reshape(-1)
@@ -79,17 +68,13 @@ def compute_ccc(truth: np.ndarray, estimate: np.ndarray) -> float:
 def compute_rmse(truth: np.ndarray, estimate: np.ndarray) -> float:
     """Compute root mean squared error between true and estimated values.
 
-    Parameters
-    ----------
-    truth : np.ndarray
-        Ground-truth values.
-    estimate : np.ndarray
-        Point estimates aligned with truth.
+    Args:
+        truth: Ground-truth values.
+        estimate: Point estimates aligned with ``truth``.
 
-    Returns
-    -------
-    float
-        Root mean squared error.
+    Returns:
+        float: Root mean squared error, or NaN when no paired values are
+            supplied.
     """
 
     x = np.asarray(truth, dtype=float).reshape(-1)

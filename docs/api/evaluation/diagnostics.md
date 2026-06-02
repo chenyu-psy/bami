@@ -6,8 +6,8 @@ posterior means. They are not model-comparison tools; for comparing models,
 build explicit long-format tables and use `estimate_recovery(...)`.
 
 These high-level diagnostics use a conservative internal sampling batch size.
-For advanced BayesFlow sampling controls, run `model.simulate(...)` and
-`model.sample_*` manually.
+For advanced BayesFlow sampling controls, call `simulate(...)` and the relevant
+posterior sampling method on your fitted workflow object.
 
 ## Simple parameter recovery
 

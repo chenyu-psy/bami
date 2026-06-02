@@ -1,5 +1,7 @@
 """Tests for generic simple workflow builders."""
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -13,6 +15,7 @@ from bami.workflows.hierarchical import (
     MaskedEquivariantSetEncoder,
     MaskedNestedSummary,
 )
+from bami.workflows.simple import _suppress_singleton_softmax_warning
 
 
 def _toy_simulator(theta: float, n_trials: int, rng) -> np.ndarray:
@@ -85,6 +88,34 @@ def _to_numpy(value) -> np.ndarray:
     if hasattr(value, "detach"):
         return value.detach().cpu().numpy()
     return np.asarray(value)
+
+
+def _trigger_singleton_softmax_warning() -> None:
+    """Run the Keras operation that warns for singleton attention axes."""
+
+    import keras
+
+    keras.ops.softmax(keras.ops.zeros((1, 4, 4, 1)), axis=3)
+
+
+def test_singleton_softmax_warning_filter_is_scoped():
+    """Aggregate warning filter should hide only the known DeepSet warning."""
+
+    with warnings.catch_warnings(record=True) as caught_disabled:
+        warnings.simplefilter("always")
+        with _suppress_singleton_softmax_warning(False):
+            _trigger_singleton_softmax_warning()
+
+    assert any("softmax over axis" in str(item.message) for item in caught_disabled)
+
+    with warnings.catch_warnings(record=True) as caught_enabled:
+        warnings.simplefilter("always")
+        with _suppress_singleton_softmax_warning(True):
+            _trigger_singleton_softmax_warning()
+            warnings.warn("ordinary warning", UserWarning)
+
+    messages = [str(item.message) for item in caught_enabled]
+    assert messages == ["ordinary warning"]
 
 
 def test_input_format_log_range_scales_trial_count():

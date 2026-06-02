@@ -23,6 +23,7 @@ import pandas as pd
 from bami.evaluation.metrics import aggregate_data, estimate_recovery
 from bami.inference import transform_hierarchical_samples
 from bami.simulators import simulate_ezdm_simple
+from bami.utils import posterior_to_dataframe
 from bami.workflows import HierarchicalWorkflow
 
 
@@ -43,16 +44,16 @@ model = HierarchicalWorkflow(
     obs_names=["pc", "mrt", "vrt"],
     n_subjects=8,
     n_trials=40,
-    keep_subject_truth=["v", "a", "t0"],
     summary_dim=4,
     n_coupling_layers=2,
     transform_samples=transform_hierarchical_samples,
 )
 ```
 
-`keep_subject_truth` saves subject-level simulated values as keys such as
-`v_subj`, `a_subj`, and `t0_subj`. These truth arrays are needed for random
-parameter recovery checks.
+By default, hierarchical workflows save all stochastic subject-level simulated
+values as keys such as `v_subj`, `a_subj`, and `t0_subj`. These truth arrays
+are needed for random parameter recovery checks. Use `keep_subject_truth=[]`
+only when you intentionally do not need subject-level truth.
 
 ## Simulate validation data
 
@@ -125,6 +126,18 @@ subject_samples = model.sample_random_posterior(
 
 print(group_samples["v_mu"].shape)
 print(subject_samples["v"].shape)
+group_posterior_df = posterior_to_dataframe(
+    group_samples,
+    model.priors,
+    level="group",
+)
+subject_posterior_df = posterior_to_dataframe(
+    subject_samples,
+    model.priors,
+    level="subject",
+)
+print(group_posterior_df.head())
+print(subject_posterior_df.head())
 ```
 
 Typical shapes:
@@ -135,7 +148,9 @@ Typical shapes:
 ```
 
 The subject-level sample arrays keep shape
-`(n_datasets, n_samples, n_subjects)`.
+`(n_datasets, n_samples, n_subjects)`. The sampling methods return
+dictionaries because the random-effect workflow needs raw group keys for
+shrinkage. Use `posterior_to_dataframe(...)` when you want tidy analysis tables.
 
 ## Build group-level recovery tables
 

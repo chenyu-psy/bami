@@ -20,17 +20,14 @@ EST_VALUE_COL = "_estimated_value"
 def _as_name_list(value, name: str) -> list[str]:
     """Normalize one column name or many column names to a list.
 
-    Parameters
-    ----------
-    value
-        A string column name or a sequence of string column names.
-    name
-        Argument name used in error messages.
+    Args:
+        value:
+            A string column name or a sequence of string column names.
+        name:
+            Argument name used in error messages.
 
-    Returns
-    -------
-    list[str]
-        Non-empty column names in their requested order.
+    Returns:
+        list[str]: Non-empty column names in their requested order.
     """
 
     if isinstance(value, str):
@@ -53,19 +50,16 @@ def _as_name_list(value, name: str) -> list[str]:
 def _check_columns(data: pd.DataFrame, cols: Sequence[str], name: str) -> None:
     """Raise a clear error when required columns are missing.
 
-    Parameters
-    ----------
-    data
-        Input table.
-    cols
-        Column names that must be present.
-    name
-        Argument name used in error messages.
+    Args:
+        data:
+            Input table.
+        cols:
+            Column names that must be present.
+        name:
+            Argument name used in error messages.
 
-    Returns
-    -------
-    None
-        Raises ``ValueError`` when any column is missing.
+    Returns:
+        None: Raises ``ValueError`` when any column is missing.
     """
 
     missing = [col for col in cols if col not in data.columns]
@@ -76,15 +70,12 @@ def _check_columns(data: pd.DataFrame, cols: Sequence[str], name: str) -> None:
 def _check_metrics(metrics: Sequence[str]) -> list[str]:
     """Validate recovery metric names.
 
-    Parameters
-    ----------
-    metrics
-        Requested metric names.
+    Args:
+        metrics:
+            Requested metric names.
 
-    Returns
-    -------
-    list[str]
-        Metric names in the requested order.
+    Returns:
+        list[str]: Metric names in the requested order.
     """
 
     requested = _as_name_list(metrics, "metrics")
@@ -106,17 +97,14 @@ def _infer_id_cols(
 ) -> list[str]:
     """Infer pairing columns shared by simulated and estimated tables.
 
-    Parameters
-    ----------
-    simulated_data, estimated_data
-        Long-format tables to pair.
-    simulated_col, estimated_col
-        Value columns excluded from automatic pairing.
+    Args:
+        simulated_data: Long-format table containing simulated values.
+        estimated_data: Long-format table containing estimated values.
+        simulated_col: Simulated-value column excluded from automatic pairing.
+        estimated_col: Estimated-value column excluded from automatic pairing.
 
-    Returns
-    -------
-    list[str]
-        Shared columns used to merge simulated and estimated values.
+    Returns:
+        list[str]: Shared columns used to merge simulated and estimated values.
     """
 
     excluded = {simulated_col, estimated_col}
@@ -134,19 +122,16 @@ def _infer_id_cols(
 def _compute_metric(metric: str, simulated: pd.Series, estimated: pd.Series) -> float:
     """Compute one requested recovery metric.
 
-    Parameters
-    ----------
-    metric
-        Metric name, one of ``ccc``, ``corr``, or ``rmse``.
-    simulated
-        Simulated values for one group.
-    estimated
-        Estimated values paired with ``simulated``.
+    Args:
+        metric:
+            Metric name, one of ``ccc``, ``corr``, or ``rmse``.
+        simulated:
+            Simulated values for one group.
+        estimated:
+            Estimated values paired with ``simulated``.
 
-    Returns
-    -------
-    float
-        Requested recovery metric.
+    Returns:
+        float: Requested recovery metric.
     """
 
     x = simulated.to_numpy(dtype=float)
@@ -168,24 +153,21 @@ def _select_recovery_cols(
 ) -> pd.DataFrame:
     """Select merge columns and rename the value column for internal use.
 
-    Parameters
-    ----------
-    data
-        Long-format table used in recovery estimation.
-    pair_cols
-        Columns used to pair simulated and estimated rows.
-    group_cols
-        Columns requested for grouped metrics. Columns are kept only when they
-        exist in this table; the final merged table is checked later.
-    value_col
-        User-facing value column name in ``data``.
-    internal_value_col
-        Internal column name used after renaming.
+    Args:
+        data:
+            Long-format table used in recovery estimation.
+        pair_cols:
+            Columns used to pair simulated and estimated rows.
+        group_cols:
+            Columns requested for grouped metrics. Columns are kept only when they
+            exist in this table; the final merged table is checked later.
+        value_col:
+            User-facing value column name in ``data``.
+        internal_value_col:
+            Internal column name used after renaming.
 
-    Returns
-    -------
-    pandas.DataFrame
-        A copy of the selected columns with a stable internal value name.
+    Returns:
+        pandas.DataFrame: A copy of the selected columns with a stable internal value name.
     """
 
     cols = list(pair_cols)
@@ -209,29 +191,28 @@ def estimate_recovery(
 ) -> pd.DataFrame:
     """Estimate recovery metrics from paired simulated and estimated values.
 
-    Parameters
-    ----------
-    simulated_data
-        Long-format table containing simulated values.
-    estimated_data
-        Long-format table containing estimated values.
-    group_by
-        Column name or column names defining each metric group.
-    metrics
-        Recovery metrics to compute. Supported values are ``ccc``, ``corr``,
-        and ``rmse``.
-    id_cols
-        Column name or column names used to pair simulated and estimated rows.
-        When ``None``, shared columns are used after excluding value columns.
-    simulated_col
-        Name of the simulated-value column in ``simulated_data``.
-    estimated_col
-        Name of the estimated-value column in ``estimated_data``.
+    Use this after simulation truth and model estimates have been converted to
+    long tables. Rows are paired by ``id_cols`` before metrics are computed, so
+    the output is only meaningful when those columns uniquely identify the same
+    simulated item in both tables.
 
-    Returns
-    -------
-    pandas.DataFrame
-        One row per group with requested recovery metrics and ``n`` paired rows.
+    Args:
+        simulated_data: Long-format table containing simulated values.
+        estimated_data: Long-format table containing estimated values.
+        group_by: Column name or column names defining each metric group.
+        metrics: Recovery metrics to compute. Supported values are ``ccc``,
+            ``corr``, and ``rmse``.
+        id_cols: Column name or column names used to pair simulated and
+            estimated rows. When ``None``, shared columns are used after excluding
+            value columns.
+        simulated_col: Name of the simulated-value column in
+            ``simulated_data``.
+        estimated_col: Name of the estimated-value column in
+            ``estimated_data``.
+
+    Returns:
+        pandas.DataFrame: One row per group with requested recovery metrics
+            and ``n`` paired rows.
     """
 
     if not isinstance(simulated_data, pd.DataFrame):

@@ -30,17 +30,14 @@ VALID_STATS: tuple[str, ...] = (
 def _as_name_list(value, name: str) -> list[str]:
     """Normalize one column name or many column names to a list.
 
-    Parameters
-    ----------
-    value
-        A string column name or a sequence of string column names.
-    name
-        Argument name used in error messages.
+    Args:
+        value:
+            A string column name or a sequence of string column names.
+        name:
+            Argument name used in error messages.
 
-    Returns
-    -------
-    list[str]
-        Non-empty column names in their requested order.
+    Returns:
+        list[str]: Non-empty column names in their requested order.
     """
 
     if value is None:
@@ -65,19 +62,16 @@ def _as_name_list(value, name: str) -> list[str]:
 def _check_columns(data: pd.DataFrame, cols: Sequence[str], name: str) -> None:
     """Raise a clear error when requested columns are absent.
 
-    Parameters
-    ----------
-    data
-        Input table.
-    cols
-        Column names that must be present.
-    name
-        Argument name used in error messages.
+    Args:
+        data:
+            Input table.
+        cols:
+            Column names that must be present.
+        name:
+            Argument name used in error messages.
 
-    Returns
-    -------
-    None
-        Raises ``ValueError`` when any column is missing.
+    Returns:
+        None: Raises ``ValueError`` when any column is missing.
     """
 
     missing = [col for col in cols if col not in data.columns]
@@ -88,15 +82,12 @@ def _check_columns(data: pd.DataFrame, cols: Sequence[str], name: str) -> None:
 def _check_stats(stats: Sequence[str] | None) -> list[str]:
     """Validate requested summary statistic names.
 
-    Parameters
-    ----------
-    stats
-        Requested statistic names. ``None`` uses ``DEFAULT_STATS``.
+    Args:
+        stats:
+            Requested statistic names. ``None`` uses ``DEFAULT_STATS``.
 
-    Returns
-    -------
-    list[str]
-        Statistic names in the requested order.
+    Returns:
+        list[str]: Statistic names in the requested order.
     """
 
     requested = list(DEFAULT_STATS if stats is None else stats)
@@ -114,17 +105,14 @@ def _check_stats(stats: Sequence[str] | None) -> list[str]:
 def _check_interval_mass(value: float, name: str) -> float:
     """Validate a central interval mass such as 0.95.
 
-    Parameters
-    ----------
-    value
-        Requested central interval mass.
-    name
-        Argument name used in error messages.
+    Args:
+        value:
+            Requested central interval mass.
+        name:
+            Argument name used in error messages.
 
-    Returns
-    -------
-    float
-        Validated interval mass between zero and one.
+    Returns:
+        float: Validated interval mass between zero and one.
     """
 
     checked = float(value)
@@ -138,21 +126,18 @@ def _summarize_values(
 ) -> dict:
     """Compute requested statistics for one numeric vector.
 
-    Parameters
-    ----------
-    values
-        Numeric values for one variable within one group.
-    stats
-        Requested statistic names.
-    ci
-        Central confidence interval mass for the mean.
-    q
-        Central quantile interval mass for observed values.
+    Args:
+        values:
+            Numeric values for one variable within one group.
+        stats:
+            Requested statistic names.
+        ci:
+            Central confidence interval mass for the mean.
+        q:
+            Central quantile interval mass for observed values.
 
-    Returns
-    -------
-    dict
-        Requested summary statistics.
+    Returns:
+        dict: Requested summary statistics.
     """
 
     arr = pd.to_numeric(values, errors="coerce").dropna().to_numpy(dtype=float)
@@ -198,29 +183,25 @@ def aggregate_data(
 ) -> pd.DataFrame:
     """Aggregate numeric columns into a researcher-friendly long table.
 
-    Parameters
-    ----------
-    data
-        Input table containing variables to summarize.
-    variables
-        One variable column name, or a list of variable column names.
-    group_by
-        Optional grouping column name or grouping column names.
-    stats
-        Statistic names to return. By default returns ``mean``, ``se``,
-        ``lower_ci``, and ``upper_ci``.
-    ci
-        Central confidence interval mass for ``lower_ci`` and ``upper_ci``.
-        These columns summarize uncertainty around the mean.
-    q
-        Central quantile interval mass for ``lower_q`` and ``upper_q``. These
-        columns summarize the observed data distribution.
+    Use this for reporting or plotting summaries when each row is an
+    observation and each selected variable should become its own row in the
+    summary table.
 
-    Returns
-    -------
-    pandas.DataFrame
-        Long-format table with grouping columns, ``variable``, and requested
-        statistics.
+    Args:
+        data: Input table containing variables to summarize.
+        variables: One variable column name, or a list of variable column
+            names.
+        group_by: Optional grouping column name or grouping column names.
+        stats: Statistic names to return. By default returns ``mean``,
+            ``se``, ``lower_ci``, and ``upper_ci``.
+        ci: Central confidence interval mass for ``lower_ci`` and
+            ``upper_ci``. These columns summarize uncertainty around the mean.
+        q: Central quantile interval mass for ``lower_q`` and ``upper_q``.
+            These columns summarize the observed data distribution.
+
+    Returns:
+        pandas.DataFrame: Long-format table with grouping columns,
+            ``variable``, and requested statistics.
     """
 
     if not isinstance(data, pd.DataFrame):

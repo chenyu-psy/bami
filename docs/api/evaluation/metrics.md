@@ -12,6 +12,33 @@ Metric helpers return long-format tables for summaries and recovery checks.
       members:
         - aggregate_data
 
+### Example
+
+```python
+import numpy as np
+import pandas as pd
+
+from bami.evaluation.metrics import aggregate_data
+
+
+rng = np.random.default_rng(2026)
+n_datasets = 40
+estimated_values = pd.DataFrame(
+    {
+        "dataset_id": np.arange(n_datasets),
+        "param": "c",
+        "estimated_value": rng.normal(loc=1.0, scale=0.15, size=n_datasets),
+    }
+)
+
+value_summary = aggregate_data(
+    estimated_values,
+    variables="estimated_value",
+    group_by="param",
+    stats=["mean", "se", "lower_ci", "upper_ci"],
+)
+```
+
 ## Recovery metrics
 
 ::: bami.evaluation.metrics.recovery
@@ -21,6 +48,42 @@ Metric helpers return long-format tables for summaries and recovery checks.
       heading_level: 3
       members:
         - estimate_recovery
+
+### Example
+
+```python
+import numpy as np
+import pandas as pd
+
+from bami.evaluation.metrics import estimate_recovery
+
+
+rng = np.random.default_rng(2026)
+n_datasets = 40
+simulated_c = rng.normal(loc=1.0, scale=0.2, size=n_datasets)
+simulated_values = pd.DataFrame(
+    {
+        "dataset_id": np.arange(n_datasets),
+        "param": "c",
+        "simulated_value": simulated_c,
+    }
+)
+estimated_values = pd.DataFrame(
+    {
+        "dataset_id": np.arange(n_datasets),
+        "param": "c",
+        "estimated_value": simulated_c
+        + rng.normal(loc=0.0, scale=0.08, size=n_datasets),
+    }
+)
+
+recovery_metrics = estimate_recovery(
+    simulated_values,
+    estimated_values,
+    group_by="param",
+    metrics=["ccc", "rmse"],
+)
+```
 
 ## Scalar metrics
 
@@ -34,47 +97,36 @@ Metric helpers return long-format tables for summaries and recovery checks.
         - compute_ccc
         - compute_rmse
 
-## Examples
+### Example
 
 ```python
+import numpy as np
 import pandas as pd
 
 from bami.evaluation.metrics import (
-    aggregate_data,
     compute_ccc,
     compute_corr,
     compute_rmse,
-    estimate_recovery,
 )
 
 
-# Simulated and estimated values are long-format tables.
+rng = np.random.default_rng(2026)
+n_datasets = 40
+simulated_c = rng.normal(loc=1.0, scale=0.2, size=n_datasets)
 simulated_values = pd.DataFrame(
     {
-        "dataset_id": [0, 1, 0, 1],
-        "param": ["c", "c", "kappa", "kappa"],
-        "simulated_value": [0.8, 1.2, 2.0, 3.0],
+        "dataset_id": np.arange(n_datasets),
+        "param": "c",
+        "simulated_value": simulated_c,
     }
 )
 estimated_values = pd.DataFrame(
     {
-        "dataset_id": [0, 1, 0, 1],
-        "param": ["c", "c", "kappa", "kappa"],
-        "estimated_value": [0.9, 1.1, 2.2, 2.8],
+        "dataset_id": np.arange(n_datasets),
+        "param": "c",
+        "estimated_value": simulated_c
+        + rng.normal(loc=0.0, scale=0.08, size=n_datasets),
     }
-)
-recovery_metrics = estimate_recovery(
-    simulated_values,
-    estimated_values,
-    group_by="param",
-    metrics=["ccc", "rmse"],
-)
-
-value_summary = aggregate_data(
-    estimated_values,
-    variables="estimated_value",
-    group_by="param",
-    stats=["mean", "se", "lower_ci", "upper_ci"],
 )
 
 truth = simulated_values["simulated_value"]
@@ -84,18 +136,3 @@ r = compute_corr(truth, estimate)
 ccc = compute_ccc(truth, estimate)
 rmse = compute_rmse(truth, estimate)
 ```
-
-For advanced posterior diagnostics, call BayesFlow directly through the model
-workflow:
-
-```python
-diagnostics = model.workflow.compute_default_diagnostics(
-    test_data=test_data,
-    num_samples=500,
-    variable_keys=None,
-    as_data_frame=True,
-)
-```
-
-These diagnostics are BayesFlow-native outputs rather than bami evaluation
-tables.
