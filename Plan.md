@@ -184,14 +184,12 @@ should be implemented before adding the new multi-condition workflow.
 
 ### 2. Subject Truth Defaults
 
-- Update hierarchical truth handling before `MultiConditionWorkflow` so
-  `keep_subject_truth=None` saves all stochastic subject-level truth,
-  `keep_subject_truth=["a", "c"]` saves only listed parameters, and
-  `keep_subject_truth=[]` saves none.
-- Apply this rule to existing `HierarchicalWorkflow` first. `SimpleWorkflow`
-  does not have subject-level truth.
-- Update examples, diagnostics, and tests that currently assume subject truth
-  is opt-in.
+- Hierarchical simulations now save all stochastic subject-level truth arrays
+  automatically as `<param>_subj`.
+- Fixed scalar prior entries are not saved as subject truth.
+- `SimpleWorkflow` does not have subject-level truth.
+- Random-effect recovery diagnostics discover available `<param>_subj` arrays
+  from simulated data instead of relying on a user-facing selector.
 
 ### 3. Documentation and Regression Checks
 
@@ -380,13 +378,36 @@ learn the simulator-first workflow without reading internals first.
   draft. A future article can add a PyDDM or other package wrapper after its API
   has been checked and the example can stay short, explicit, and optional.
 
-### 5. Validation and Remaining Checks
+### 5. Workflow Constructor Simplification
 
-- Source changes require package checks before this milestone is marked
-  complete.
-- Run `uv run pytest` to validate simulator and workflow contract changes.
-- Run `uv run ruff check .` and `uv run black --check .` to validate style.
-- Run `uv run mkdocs build` to confirm the new article navigation and links.
+- Completed breaking cleanup of workflow constructors for `0.2.3`.
+- `n_trials` and `n_subjects` now each accept either a fixed integer or a
+  two-value flexible range. Public `n_trials_range` and `n_subjects_range`
+  arguments have been removed.
+- `obs_names` is now required for workflow construction. Public `data_width`
+  and legacy `contract` entry points have been removed.
+- Aggregate trial-count encoding now goes through `input_format`. Public
+  `include_trial_feature`, `row_transform`, `raw_data_key`, and
+  `trial_feature_scale` have been removed.
+- Added `counts_as_proportions(...)` for count simulators that should train on
+  proportions, append encoded `n_trials`, and optionally preserve raw counts
+  through `keep_raw_as`.
+- `HierarchicalWorkflow` now always saves all stochastic subject-level truth
+  arrays as `<param>_subj`; the public subject-truth selector has been removed.
+- `validate_workflow_contract` has been removed from the public workflow API.
+
+### 6. Validation and Remaining Checks
+
+- Latest validation for the workflow constructor simplification passed:
+  `uv run python -m py_compile src/bami/inputs/formats.py src/bami/workflows/contracts.py src/bami/workflows/simple.py src/bami/workflows/hierarchical.py`,
+  `uv run python -m py_compile src/bami/workflows/hierarchical.py src/bami/evaluation/diagnostics.py`,
+  `uv run pytest`, `uv run mkdocs build`, and `git diff --check`.
+- `uv run pytest` reported only the existing Keras/Torch NumPy deprecation
+  warnings.
+- `uv run mkdocs build` reported only the existing Material for MkDocs 2.0
+  warning.
+- Run `uv run ruff check .` and `uv run black --check .` before release if
+  style-gate parity with earlier milestones is required.
 - Review rendered docs for researcher-friendly wording: clear function
   signatures, explicit shapes, and no unnecessary BayesFlow internals.
 
@@ -487,10 +508,8 @@ subject-level raw-effect correlations.
 
 ### 6. Subject Truth and Simulator Mapping
 
-- Build on the 0.2.1 hierarchical truth rule:
-  `keep_subject_truth=None` saves all stochastic subject-level truth,
-  `keep_subject_truth=["a", "c"]` saves only listed parameters, and
-  `keep_subject_truth=[]` saves none.
+- Build on the current hierarchical truth rule: simulations save all
+  stochastic subject-level truth arrays automatically.
 - For `MultiConditionWorkflow`, save subject truth as arrays:
   `sim["<param>_subj"].shape == (n_datasets, n_subjects, n_condition_cells)`.
 - Broadcast lower-dimensional basis parameters to full condition cells when

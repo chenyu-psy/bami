@@ -47,8 +47,7 @@ model = SimpleWorkflow(
     simulator=simulate_sdm_simple,
     observation="trial",
     obs_names=["error"],
-    n_trials=None,
-    n_trials_range=(50, 201),
+    n_trials=(50, 201),
 )
 ```
 
@@ -106,8 +105,8 @@ model = HierarchicalWorkflow(
     simulator=simulate_sdm_simple,
     observation="trial",
     obs_names=["error"],
-    n_subjects_range=(20, 61),
-    n_trials_range=(50, 201),
+    n_subjects=(20, 61),
+    n_trials=(50, 201),
 )
 ```
 
@@ -116,16 +115,9 @@ check a fixed simple workflow first whenever possible.
 
 ## Subject-level recovery
 
-Hierarchical workflows can save subject-level truth values for recovery checks.
-The default `keep_subject_truth=None` keeps all stochastic subject parameters.
-Use a list to keep selected parameters:
-
-```python
-model = HierarchicalWorkflow(
-    ...,
-    keep_subject_truth=["c", "kappa"],
-)
-```
+Hierarchical workflows automatically save all stochastic subject-level true
+parameter values as `<param>_subj` arrays for recovery checks. Fixed constants
+in `priors` are not saved as subject truth.
 
 Subject-level recovery uses the random estimator path:
 
@@ -146,6 +138,30 @@ subject_estimates = model.estimate_random_parameter(
 Use this output for point-estimate recovery of subject parameters. It is not a
 posterior sample and should not be used for posterior intervals or coverage
 checks.
+
+## Training size
+
+The default training settings are a starting point, not a fixed rule for every
+project. Increase them when the simulator is fast, the model is stable, or the
+final analysis needs a more thorough fit.
+
+`n_batch` and `max_epochs` mainly control total training computation.
+Increasing `n_batch` gives each epoch more simulated batches. Increasing
+`max_epochs` gives early stopping more chances to continue when validation loss
+is still improving.
+
+`batch_size` mainly affects memory use during each training step and the
+stability of gradient updates. Larger batches can use more memory, while very
+small batches can make training noisier.
+
+`validation_data` affects both the cost of simulating validation datasets and
+the stability of early stopping. Larger validation sets can make validation
+loss less noisy, but they also take longer to simulate and store.
+
+`workers` and `max_queue_size` mainly affect concurrent simulation and
+prefetching. Larger values can improve throughput on fast machines or with
+slow simulators, but they also increase memory pressure and can be less stable
+in notebook or cross-platform workflows.
 
 ## Model-comparison workflows
 

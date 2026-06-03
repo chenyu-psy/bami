@@ -125,4 +125,4 @@ Fixed trial models issue a warning if observed subjects use a different trial
 count than the training `n_trials`, because the resulting subject posteriors may
 be less reliable. Flexible trial models accept raw variable-length subject trial
 arrays and add the padding and `active_trial` mask internally, as long as the
-observed trial counts fit inside `n_trials_range`.
+observed trial counts fit inside the range used for `n_trials`.

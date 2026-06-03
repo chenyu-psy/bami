@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 import pytest
 
-from bami.inputs import aggregate_summary, counts, proportions
+from bami.inputs import aggregate_summary, counts, counts_as_proportions, proportions
 from bami.inference.priors import log_sigma_key, mu_raw_key, raw_key
 from bami.workflows import (
     HierarchicalWorkflow,
@@ -134,6 +134,23 @@ def test_input_format_presets_encode_expected_widths():
     assert counts_with_n.shape == (3,)
 
 
+def test_counts_as_proportions_encodes_counts_and_keeps_raw_metadata():
+    """Count-proportion inputs should divide by n and declare raw diagnostics."""
+
+    row = np.array([2, 1, 1, 0, 1], dtype=np.float32)
+    input_format = counts_as_proportions(
+        n_range=(5, 9),
+        keep_raw_as="raw_counts",
+    )
+
+    encoded = input_format.encode(row, 5)
+
+    assert np.allclose(encoded[:5], row / 5.0)
+    assert np.isclose(encoded[5], 5 / 8.0)
+    assert input_format.to_dict()["kind"] == "counts_as_proportions"
+    assert input_format.to_dict()["keep_raw_as"] == "raw_counts"
+
+
 def _build_toy_workflow() -> SimpleWorkflow:
     """Build a minimal simulator-first workflow for fast unit tests.
 
@@ -149,7 +166,7 @@ def _build_toy_workflow() -> SimpleWorkflow:
         priors={"theta": {"mean": 0.0, "sd": 1.0, "link": "identity"}},
         simulator=_toy_simulator,
         observation="aggregate",
-        data_width=2,
+        obs_names=["theta_value", "n_trials_raw"],
         n_trials=7,
         summary_dim=4,
         n_coupling_layers=2,
@@ -167,6 +184,7 @@ def test_fixed_simple_workflow_simulates_fixed_width_rows():
     assert np.all(sim["data"][:, :, 1] == 7)
     assert model.workflow.workflow_family == "fixed_simple"
     assert model.workflow.workflow_level == "simple"
+    assert model.workflow.trial_design == "fixed"
 
 
 def test_fixed_simple_workflow_infers_raw_prior_keys():
@@ -202,8 +220,8 @@ def test_fixed_simple_workflow_reuses_validation_data():
     assert third["data"].shape == (4, 1, 2)
 
 
-def test_simple_workflow_accepts_contract():
-    """Contract input should keep simulator settings grouped when useful."""
+def test_simple_workflow_rejects_contract_argument():
+    """Workflow setup should use explicit constructor fields, not contract."""
 
     contract = {
         "name": "toy",
@@ -213,15 +231,14 @@ def test_simple_workflow_accepts_contract():
         "data_width": 2,
     }
 
-    model = SimpleWorkflow(
-        contract=contract,
-        observation="aggregate",
-        n_trials=7,
-        summary_dim=4,
-        n_coupling_layers=2,
-    )
-
-    assert model.workflow.model_name == "toy"
+    with pytest.raises(TypeError, match="contract"):
+        SimpleWorkflow(
+            **{"contract": contract},
+            observation="aggregate",
+            n_trials=7,
+            summary_dim=4,
+            n_coupling_layers=2,
+        )
 
 
 def test_simple_workflow_requires_explicit_observation():
@@ -233,7 +250,7 @@ def test_simple_workflow_requires_explicit_observation():
             param_names=["theta"],
             priors={"theta": {"mean": 0.0, "sd": 1.0, "link": "identity"}},
             simulator=_toy_simulator,
-            data_width=2,
+            obs_names=["theta_value", "n_trials_raw"],
             n_trials=7,
             summary_dim=4,
             n_coupling_layers=2,
@@ -250,7 +267,7 @@ def test_simple_workflow_rejects_unknown_observation():
             priors={"theta": {"mean": 0.0, "sd": 1.0, "link": "identity"}},
             simulator=_toy_simulator,
             observation="summary",
-            data_width=2,
+            obs_names=["theta_value", "n_trials_raw"],
             n_trials=7,
             summary_dim=4,
             n_coupling_layers=2,
@@ -291,8 +308,7 @@ def test_simple_workflow_flex_trial_observation_adds_active_mask():
         simulator=_toy_trial_simulator,
         observation="trial",
         obs_names=["response"],
-        n_trials=None,
-        n_trials_range=(4, 8),
+        n_trials=(4, 8),
         summary_dim=4,
         n_coupling_layers=2,
     )
@@ -342,9 +358,8 @@ def test_simple_workflow_draws_trial_counts_from_range():
         priors={"theta": {"mean": 0.0, "sd": 1.0, "link": "identity"}},
         simulator=_toy_simulator,
         observation="aggregate",
-        data_width=2,
-        n_trials=None,
-        n_trials_range=(5, 9),
+        obs_names=["theta_value", "n_trials_raw"],
+        n_trials=[5, 9],
         summary_dim=4,
         n_coupling_layers=2,
     )
@@ -369,9 +384,8 @@ def test_simple_workflow_input_format_encodes_flex_summary_n():
         priors={"theta": {"mean": 0.0, "sd": 1.0, "link": "identity"}},
         simulator=_toy_summary_simulator,
         observation="aggregate",
-        data_width=1,
-        n_trials=None,
-        n_trials_range=(5, 9),
+        obs_names=["summary"],
+        n_trials=(5, 9),
         input_format=aggregate_summary(n_range=(5, 8)),
         summary_dim=4,
         n_coupling_layers=2,
@@ -390,19 +404,19 @@ def test_simple_workflow_input_format_encodes_flex_summary_n():
     assert np.isclose(manual_data[0, 0, -1], -1.0)
 
 
-def test_simple_workflow_rejects_ambiguous_trial_design():
-    """Trial design should be exactly one of fixed count or count range."""
+@pytest.mark.parametrize("bad_n_trials", [None, (5,), (9, 5), 0])
+def test_simple_workflow_rejects_invalid_n_trials(bad_n_trials):
+    """Trial design should come from one valid n_trials value."""
 
-    with pytest.raises(ValueError, match="either n_trials or n_trials_range"):
+    with pytest.raises(ValueError, match="n_trials"):
         SimpleWorkflow(
             name="toy",
             param_names=["theta"],
             priors={"theta": {"mean": 0.0, "sd": 1.0, "link": "identity"}},
             simulator=_toy_simulator,
             observation="aggregate",
-            data_width=2,
-            n_trials=7,
-            n_trials_range=(5, 9),
+            obs_names=["theta_value", "n_trials_raw"],
+            n_trials=bad_n_trials,
             summary_dim=4,
             n_coupling_layers=2,
         )
@@ -416,7 +430,7 @@ def test_hierarchical_workflow_simulates_fixed_group_rows():
         priors={"theta": {"mean": "normal(0, 0.1)", "sd": 1.0, "link": "identity"}},
         simulator=_toy_simulator,
         observation="aggregate",
-        data_width=2,
+        obs_names=["theta_value", "n_trials_raw"],
         n_subjects=3,
         n_trials=7,
         summary_dim=4,
@@ -429,6 +443,7 @@ def test_hierarchical_workflow_simulates_fixed_group_rows():
     assert np.all(sim["data"][:, :, 1] == 7)
     assert model.workflow.workflow_level == "hierarchical"
     assert model.workflow.workflow_family == "fixed_hierarchical"
+    assert model.workflow.subject_design == "fixed"
     assert model.workflow.observation == "aggregate"
 
 
@@ -453,6 +468,24 @@ def test_hierarchical_trial_observation_outputs_nested_trial_rows():
     assert sim["data"].shape == (4, 3, 7, 1)
     assert model.workflow.observation == "trial"
     assert model.workflow.obs_names == ["response"]
+
+
+@pytest.mark.parametrize("bad_n_subjects", [None, (2,), (5, 2), 0])
+def test_hierarchical_workflow_rejects_invalid_n_subjects(bad_n_subjects):
+    """Subject design should come from one valid n_subjects value."""
+
+    with pytest.raises(ValueError, match="n_subjects"):
+        HierarchicalWorkflow(
+            name="toy_hier",
+            priors={"theta": {"mean": "normal(0, 0.1)", "sd": 1.0, "link": "identity"}},
+            simulator=_toy_simulator,
+            observation="aggregate",
+            obs_names=["theta_value", "n_trials_raw"],
+            n_subjects=bad_n_subjects,
+            n_trials=7,
+            summary_dim=4,
+            n_coupling_layers=2,
+        )
 
 
 def test_hierarchical_trial_summary_accepts_bayesflow_stage_arg():
@@ -649,8 +682,8 @@ def test_hierarchical_flex_trial_observation_adds_trial_masks():
         simulator=_toy_trial_simulator,
         observation="trial",
         obs_names=["response"],
-        n_subjects_range=(2, 5),
-        n_trials_range=(4, 8),
+        n_subjects=[2, 5],
+        n_trials=(4, 8),
         summary_dim=4,
         n_coupling_layers=2,
     )
@@ -663,6 +696,7 @@ def test_hierarchical_flex_trial_observation_adds_trial_masks():
     assert np.all((mask == 0) | (mask == 1))
     assert np.all(n_subjects >= 2)
     assert np.all(n_subjects < 5)
+    assert model.workflow.subject_design == "flex"
     assert model.workflow.obs_names == ["response", "active_trial"]
     assert isinstance(model.summary_network, MaskedNestedSummary)
     assert model.summary_network.has_trial_mask is True
@@ -680,10 +714,10 @@ def test_hierarchical_workflow_pads_flexible_subject_rows():
         priors={"theta": {"mean": "normal(0, 0.1)", "sd": 1.0, "link": "identity"}},
         simulator=_toy_simulator,
         observation="aggregate",
-        data_width=2,
-        n_subjects_range=(1, 5),
-        n_trials_range=(5, 9),
-        include_trial_feature=True,
+        obs_names=["theta_value", "n_trials_raw"],
+        n_subjects=(1, 5),
+        n_trials=(5, 9),
+        input_format=aggregate_summary(n_range=(5, 8)),
         summary_dim=4,
         n_coupling_layers=2,
     )
@@ -709,9 +743,9 @@ def test_hierarchical_workflow_input_format_encodes_subject_summary_n():
         priors={"theta": {"mean": "normal(0, 0.1)", "sd": 1.0, "link": "identity"}},
         simulator=_toy_summary_simulator,
         observation="aggregate",
-        data_width=1,
-        n_subjects_range=(2, 5),
-        n_trials_range=(10, 15),
+        obs_names=["summary"],
+        n_subjects=(2, 5),
+        n_trials=(10, 15),
         input_format=aggregate_summary(n_range=(10, 14)),
         summary_dim=4,
         n_coupling_layers=2,
@@ -745,7 +779,7 @@ def test_hierarchical_workflow_draws_default_group_and_subject_values():
         priors=priors,
         simulator=_toy_simulator,
         observation="aggregate",
-        data_width=2,
+        obs_names=["theta_value", "n_trials_raw"],
         n_subjects=2,
         n_trials=5,
         summary_dim=4,

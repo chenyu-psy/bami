@@ -94,9 +94,9 @@ The model method is a shallow alias for the evaluation function.
 ## Random parameter recovery
 
 Use `plot_random_recovery(...)` to diagnose subject-level random parameters in
-a hierarchical workflow. The workflow must save subject truth with
-`keep_subject_truth`. Each point is one simulated dataset's subject-level
-recovery metric for one parameter.
+a hierarchical workflow. Simulated data must contain subject truth arrays such
+as `c_subj` or `kappa_subj`. Each point is one simulated dataset's
+subject-level recovery metric for one parameter.
 
 ::: bami.evaluation.diagnostics.plot_random_recovery
     options:

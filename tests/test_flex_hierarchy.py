@@ -3,7 +3,8 @@
 import numpy as np
 
 from fixtures_model_specs import M3_SPEC, m3_activation
-from bami.simulators.m3 import prop_m3, simulate_m3_custom
+from bami.inputs import counts, counts_as_proportions
+from bami.simulators.m3 import simulate_m3_custom
 from bami.workflows import HierarchicalWorkflow
 
 
@@ -11,8 +12,8 @@ def _build_small_model(
     *,
     priors=None,
     normalize_counts: bool = False,
-    n_subjects_range=(1, 5),
-    n_trials_range=(5, 9),
+    n_subjects=(1, 5),
+    n_trials=(5, 9),
 ) -> HierarchicalWorkflow:
     """Build a small flex model for fast unit tests.
 
@@ -22,7 +23,7 @@ def _build_small_model(
         Optional M3 prior specification.
     normalize_counts
         Whether to use response proportions and scaled trial counts.
-    n_subjects_range, n_trials_range
+    n_subjects, n_trials
         Flexible design ranges passed to ``HierarchicalWorkflow``.
 
     Returns
@@ -32,7 +33,17 @@ def _build_small_model(
     """
 
     priors = M3_SPEC["priors"] if priors is None else priors
-    row_transform = prop_m3 if normalize_counts else None
+    if normalize_counts:
+        input_format = counts_as_proportions(
+            n_range=n_trials,
+            keep_raw_as="raw_counts",
+        )
+    else:
+        input_format = counts(
+            add_n=True,
+            n_range=n_trials,
+            n_transform="divide_by_high_minus_one",
+        )
     return HierarchicalWorkflow(
         name=M3_SPEC["model_name"],
         priors=priors,
@@ -43,14 +54,10 @@ def _build_small_model(
             "n_options": M3_SPEC["n_options"],
             "rule": M3_SPEC["rule"],
         },
-        data_width=len(M3_SPEC["activation_contract"]["order"]),
-        n_subjects_range=n_subjects_range,
-        n_trials_range=n_trials_range,
-        include_trial_feature=True,
-        keep_subject_truth=["a", "c", "ra", "rc"],
-        raw_data_key="raw_counts" if normalize_counts else None,
-        row_transform=row_transform,
-        trial_feature_scale=n_trials_range[1] - 1 if normalize_counts else None,
+        obs_names=M3_SPEC["activation_contract"]["order"],
+        n_subjects=n_subjects,
+        n_trials=n_trials,
+        input_format=input_format,
     )
 
 
@@ -68,7 +75,7 @@ def test_flex_simulator_uses_variable_subject_counts_and_trials():
     data = sim["data"]
     for dataset_id, n_subj in enumerate(n_subjects):
         active = data[dataset_id, :, -1] > 0.5
-        totals = data[dataset_id, active, 5]
+        totals = data[dataset_id, active, 5] * 8
         assert int(active.sum()) == int(n_subj)
         assert np.all(totals >= 5)
         assert np.all(totals < 9)
@@ -114,8 +121,8 @@ def test_flex_normalized_simulator_keeps_raw_counts():
     np.random.seed(2026)
     model = _build_small_model(
         normalize_counts=True,
-        n_subjects_range=(1, 3),
-        n_trials_range=(5, 9),
+        n_subjects=(1, 3),
+        n_trials=(5, 9),
     )
 
     sim = model.workflow.simulate(3)

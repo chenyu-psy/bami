@@ -50,8 +50,7 @@ model = HierarchicalWorkflow(
 
 By default, hierarchical workflows save all stochastic subject-level simulated
 values as keys such as `v_subj`, `a_subj`, and `t0_subj`. These truth arrays
-are needed for random parameter recovery checks. Use `keep_subject_truth=[]`
-only when you intentionally do not need subject-level truth.
+are needed for random parameter recovery checks.
 
 ## Simulate validation data
 
@@ -302,8 +301,8 @@ keep the explicit long-format tables and use `estimate_recovery(...)`.
 
 ## Flexible subjects and trials
 
-Use `n_subjects_range` and `n_trials_range` when group size and trial count
-should vary across simulated datasets.
+Use two-value `n_subjects` and `n_trials` ranges when group size and trial
+count should vary across simulated datasets.
 
 ```python
 from bami.inputs import aggregate_summary
@@ -316,9 +315,8 @@ flex_model = HierarchicalWorkflow(
     observation="aggregate",
     simulator_kwargs={"s": 1},
     obs_names=["pc", "mrt", "vrt"],
-    n_subjects_range=(2, 5),
-    n_trials_range=(10, 15),
-    keep_subject_truth=["v", "a", "t0"],
+    n_subjects=(2, 5),
+    n_trials=(10, 15),
     input_format=aggregate_summary(n_range=(10, 14)),
     summary_dim=4,
     n_coupling_layers=2,

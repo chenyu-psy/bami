@@ -1,378 +1,14 @@
 # Workflows
 
-Use workflows to connect a cognitive-model simulator to BayesFlow. A workflow
-keeps the main modeling choices in one place: priors, simulator, observation
-shape, trial or subject design, and training behavior.
-
-## Which workflow should I use?
-
-| Workflow | Use when | Simulator call |
-| --- | --- | --- |
-| `SimpleWorkflow` | One prior draw generates one dataset. | Once per simulated dataset. |
-| `HierarchicalWorkflow` | One group draw generates several subjects. | Once per subject in each simulated dataset. |
-
-Most arguments are shared. The main difference is that `HierarchicalWorkflow`
-also needs a subject-count design and can keep subject-level truth values for
-recovery checks.
-
-## Basic recipe
-
-A typical workflow setup follows this order:
-
-1. Write `priors` for the parameters you want to infer.
-2. Choose or write a `simulator` that receives public parameter values,
-   and `n_trials`.
-3. Set `observation` to match the simulator output shape.
-4. Set trial counts with `n_trials` or `n_trials_range`.
-5. For hierarchical workflows, set subject counts with `n_subjects` or
-   `n_subjects_range`.
-6. Build the workflow object.
-7. Simulate, train, and sample from the posterior.
-
-## Setting priors
-
-`priors` is a compact dictionary. Each dictionary-valued parameter is inferred
-by the workflow:
-
-```python
-priors = {
-    "a": {"mean": 0.0, "sd": 1.0, "link": "identity"},
-    "c": {"mean": "normal(0, 1)", "sd": "exponential(1)", "link": "log"},
-    "p": {"mean": "logistic(0, 0.75)", "sd": 0.2, "link": "logit"},
-}
-```
-
-Each inferred parameter has three fields:
-
-| Field | Meaning |
-| --- | --- |
-| `mean` | Raw-space center for the parameter. This can be a number or a distribution string. |
-| `sd` | Raw-space standard deviation. This can be a positive number or a positive distribution string. |
-| `link` | Transformation from raw values to the public values passed to the simulator. |
-
-The supported links are:
-
-| Link | Use when | Public scale |
-| --- | --- | --- |
-| `identity` | The parameter can be any real value. | `raw` |
-| `log` | The parameter must be positive. | `exp(raw)` |
-| `softplus` | The parameter must be positive. | `log(1 + exp(raw))` |
-| `logit` | The parameter must be between 0 and 1. | inverse-logit of `raw` |
-| `probit` | The parameter must be between 0 and 1. | normal CDF of `raw` |
-| `cloglog` | The parameter must be between 0 and 1. | complementary log-log transform of `raw` |
-
-Distribution strings use a short function-like format, such as
-`"normal(0, 1)"`, `"logistic(0, 0.75)"`, `"uniform(0, 1)"`, or
-`"exponential(1)"`. Supported distribution names are `normal`, `logistic`,
-`uniform`, `truncnorm`, `beta`, `gamma`, `exponential`, and `binomial`. Use
-distribution strings when the center or spread should vary across simulated
-datasets instead of staying fixed.
-
-`sd` must always be positive. If `sd` is a distribution string, use a
-positive-support distribution such as `"exponential(1)"`, `"gamma(2, 0.1)"`,
-`"beta(2, 8)"`, or a positive uniform range such as `"uniform(0.1, 0.3)"`.
-
-Scalar values in `priors` are fixed simulator constants. They are passed to the
-simulator but are not inferred:
-
-```python
-priors = {
-    "a": {"mean": 0.0, "sd": 1.0, "link": "log"},
-    "s": 1.0,
-}
-```
-
-In this example, `a` is inferred and `s` is fixed.
-
-For a researcher-facing explanation of raw scale and links, see
-[Priors](../articles/priors.md). For simulator constants and observation
-contracts, see [Simulators](../articles/simulators.md).
-
-## Simple example
-
-Use `SimpleWorkflow` when one prior draw should generate one dataset.
-
-```python
-from bami.simulators import simulate_sdm_simple
-from bami.workflows import SimpleWorkflow
-
-
-model = SimpleWorkflow(
-    name="SDM",
-    param_names=["c", "kappa"],
-    priors={
-        "c": {"mean": "normal(1, 0.35)", "sd": 0.15, "link": "log"},
-        "kappa": {"mean": "normal(1.2, 0.35)", "sd": 0.15, "link": "log"},
-    },
-    simulator=simulate_sdm_simple,
-    observation="trial",
-    obs_names=["error"],
-    n_trials=25,
-)
-
-sim = model.simulate(4)
-print(sim["data"].shape)
-```
-
-## Hierarchical example
-
-Use `HierarchicalWorkflow` when one group draw should generate several
-subjects.
-
-```python
-from bami.simulators import simulate_ezdm_simple
-from bami.workflows import HierarchicalWorkflow
-
-
-model = HierarchicalWorkflow(
-    name="ezDM",
-    priors={
-        "v": {"mean": "normal(0, 0.6)", "sd": 0.15, "link": "log"},
-        "a": {"mean": "normal(0.2, 0.4)", "sd": 0.15, "link": "log"},
-        "t0": {"mean": "logistic(-2, 0.5)", "sd": 0.15, "link": "logit"},
-    },
-    simulator=simulate_ezdm_simple,
-    observation="aggregate",
-    simulator_kwargs={"s": 1},
-    obs_names=["pc", "mrt", "vrt"],
-    n_subjects=3,
-    n_trials=20,
-)
-
-sim = model.simulate(4)
-print(sim["data"].shape)
-```
-
-## Choosing key arguments
-
-### Observation shape
-
-Use `observation="aggregate"` when the simulator returns one fixed-width row of
-summary statistics, counts, or proportions for each dataset or subject.
-
-Use `observation="trial"` when the simulator returns one row per trial. This is
-useful when trial-level responses should be summarized by the neural network.
-
-### Trial counts
-
-Use `n_trials` for a fixed trial count:
-
-```python
-model = SimpleWorkflow(..., n_trials=100)
-```
-
-Use `n_trials_range=(low, high)` when simulated datasets should vary in trial
-count:
-
-```python
-model = SimpleWorkflow(..., n_trials=None, n_trials_range=(50, 201))
-```
-
-The upper bound is exclusive, so this example draws 50 to 200 trials.
-
-### Subject counts
-
-Hierarchical workflows also need a subject-count design. Use `n_subjects` for a
-fixed number of subjects:
-
-```python
-model = HierarchicalWorkflow(..., n_subjects=30)
-```
-
-Use `n_subjects_range=(low, high)` when simulated datasets should vary in
-subject count:
-
-```python
-model = HierarchicalWorkflow(..., n_subjects=None, n_subjects_range=(20, 41))
-```
-
-### Observation names
-
-`obs_names` labels the columns returned by the simulator. For aggregate ezDM
-summaries, this might be:
-
-```python
-obs_names = ["pc", "mrt", "vrt"]
-```
-
-For trial-level SDM errors, this might be:
-
-```python
-obs_names = ["error"]
-```
-
-### Input format
-
-Use `input_format` when an aggregate row needs to encode trial count explicitly.
-This is useful when reliability changes with trial count and the workflow
-should receive that information as part of the data row.
-
-For trial-level workflows with flexible trial counts, `bami` pads rows and adds
-an active-trial mask automatically.
-
-### Subject truth
-
-Use `keep_subject_truth=None` in hierarchical workflows when recovery checks
-need all stochastic subject-level true values. This is the default. Use a list
-such as `keep_subject_truth=["a", "c"]` to save only selected parameters, or
-`keep_subject_truth=[]` to save none. Subject truth is stored for later
-evaluation without changing the simulator interface.
-
-## Common workflow actions
-
-After constructing a workflow object, the usual actions are:
-
-```python
-sim = model.simulate(4)
-history = model.train_workflow(
-    max_epochs=50,
-    validation_data=64,
-    file="saved_workflows/my_workflow.keras",
-    ...
-)
-posterior = model.sample_posterior(test_data=sim, num_samples=500)
-```
-
-The `simulate(...)` method generates prior-predictive data using the workflow's
-data-shape contract. The `train_workflow(...)` method fits the workflow and can
-load or save a trained workflow file. Simple workflows use
-`SimpleWorkflow.sample_posterior(...)` for posterior draws; hierarchical
-workflows use `HierarchicalWorkflow.sample_group_posterior(...)` for group-level
-posterior draws.
-
-For hierarchical subject-level parameters, train the random-effect workflow
-separately. By default it inherits the training settings saved by
-`train_workflow(...)`, while using its own saved workflow file:
-
-```python
-model.train_random_workflow(file="saved_workflows/my_random_workflow.keras")
-```
-
-This legacy random workflow is a BayesFlow posterior workflow. Its
-`sample_random_posterior(...)` method returns posterior draws, but the current
-random-recovery diagnostic no longer depends on it.
-
-For deterministic subject-level recovery, use the Route C random estimator
-instead:
-
-```python
-model.train_random_estimator(file="saved_workflows/my_random_estimator.pt")
-estimates = model.estimate_random_parameter(
-    observed_data=simulated_or_observed_data,
-    group_samples=group_samples,
-)
-```
-
-The training call returns `None` and stores the trained or loaded estimator on
-the workflow object's `random_estimator` attribute. Call
-`estimate_random_parameter(...)` to get point estimates in a `pandas.DataFrame`,
-not posterior draws. By default, the table contains only `dataset_id`,
-`subject_id`, and public parameter estimates. Use `include_scales=True` to add
-raw, group-centered deviation, and standardized z-scale columns for diagnostic
-work. `HierarchicalWorkflow.plot_random_recovery(...)` uses this estimator
-path. Do not use estimator output for posterior intervals or coverage checks.
-
-By default, `train_random_estimator(...)` uses `sigma_values=None`. This chooses
-parameter-specific low, mid, and high group-sigma values from the model's group
-sigma prior. A sequence such as `(0.05, 0.15, 0.45)` keeps the older behavior
-and shares one sigma grid across all hierarchical parameters. A dict can be
-used when a project needs manual parameter-specific grids, for example
-`{"c": (0.05, 0.15, 0.45), "kappa": (0.1, 0.3, 0.8)}`. All sigma grids use
-synchronized bins rather than Cartesian products.
-
-Random recovery diagnostics process datasets in chunks to keep memory use
-bounded. Use `recovery_batch_size` to control how many simulated recovery
-datasets are processed per chunk, and use `sample_batch_size` only for the
-group-posterior sampling mini-batch size.
-
-### Adjusting training size
-
-The default training settings are intended to be a reasonable starting point
-for fitting a workflow, not a fixed rule for every project. Researchers can
-increase the training settings when a simulator is fast, the model is stable,
-or a project needs a more thorough final fit.
-
-`n_batch` and `max_epochs` mainly control total training computation. Increasing
-`n_batch` gives each epoch more simulated batches. Increasing `max_epochs` gives
-early stopping more chances to continue when validation loss is still
-improving.
-
-`batch_size` mainly affects memory use during each training step and the
-stability of gradient updates. Larger batches can use more memory, while very
-small batches can make training noisier.
-
-`validation_data` affects both the cost of simulating validation datasets and
-the stability of early stopping. Larger validation sets can make validation
-loss less noisy, but they also take longer to simulate and store.
-
-`workers` and `max_queue_size` mainly affect concurrent simulation and
-prefetching. Larger values can improve throughput for fast machines and
-slow simulators, but they also increase memory pressure and can be less stable
-in notebook or cross-platform workflows.
-
-::: bami.workflows.simple.SimpleWorkflow.simulate
-    options:
-      show_root_heading: true
-      show_root_toc_entry: false
-      heading_level: 3
-
-::: bami.workflows.hierarchical.HierarchicalWorkflow.simulate
-    options:
-      show_root_heading: true
-      show_root_toc_entry: false
-      heading_level: 3
-
-::: bami.workflows.simple.SimpleWorkflow.train_workflow
-    options:
-      show_root_heading: true
-      show_root_toc_entry: false
-      heading_level: 3
-
-::: bami.workflows.simple.SimpleWorkflow.sample_posterior
-    options:
-      show_root_heading: true
-      show_root_toc_entry: false
-      heading_level: 3
-
-::: bami.workflows.hierarchical.HierarchicalWorkflow.sample_group_posterior
-    options:
-      show_root_heading: true
-      show_root_toc_entry: false
-      heading_level: 3
-
-::: bami.workflows.hierarchical.HierarchicalWorkflow.train_random_workflow
-    options:
-      show_root_heading: true
-      show_root_toc_entry: false
-      heading_level: 3
-
-::: bami.workflows.hierarchical.HierarchicalWorkflow.sample_random_posterior
-    options:
-      show_root_heading: true
-      show_root_toc_entry: false
-      heading_level: 3
-
-::: bami.workflows.hierarchical.HierarchicalWorkflow.train_random_estimator
-    options:
-      show_root_heading: true
-      show_root_toc_entry: false
-      heading_level: 3
-
-::: bami.workflows.hierarchical.HierarchicalWorkflow.estimate_random_parameter
-    options:
-      show_root_heading: true
-      show_root_toc_entry: false
-      heading_level: 3
-
-For trial-level random-effect sampling, `sample_random_posterior()` uses the
-model's trial design. Fixed trial models warn when observed subjects have a
-different trial count than `n_trials`. Flexible trial models can receive raw
-variable-length subject trial arrays; the function pads them to the model's
-maximum trial count and adds the `active_trial` mask before sampling.
+Use this page to look up workflow constructors and methods. For step-by-step
+teaching examples, start with the [SDM workflow article](../articles/sdm-fixed-simple.md),
+the [hierarchical ezDM example](../examples/hierarchical-ezdm.md), or
+[workflow structure guide](../articles/advanced-workflows.md).
 
 ## Constructor reference
 
-Use this section when you need the complete argument list.
+Use constructors to define the simulator, priors, observation shape, trial
+design, and runtime device for a workflow.
 
 ### SimpleWorkflow
 
@@ -391,3 +27,192 @@ Use this section when you need the complete argument list.
       show_root_toc_entry: false
       heading_level: 4
       members: false
+
+## Method reference
+
+Examples assume that `model` is already a configured workflow object. The
+examples are intentionally short; full workflows live in the articles linked
+above.
+
+### Common methods
+
+These methods are available on both `SimpleWorkflow` and
+`HierarchicalWorkflow`. The reference blocks below use `SimpleWorkflow` as the
+representative signature source; hierarchical workflows expose the same method
+names, with data shapes following the hierarchical workflow contract.
+
+#### simulate
+
+::: bami.workflows.simple.SimpleWorkflow.simulate
+    options:
+      show_root_heading: true
+      show_root_toc_entry: false
+      heading_level: 5
+
+Example:
+
+```python
+sim = model.simulate(4)
+print(sim["data"].shape)
+```
+
+#### train_workflow
+
+::: bami.workflows.simple.SimpleWorkflow.train_workflow
+    options:
+      show_root_heading: true
+      show_root_toc_entry: false
+      heading_level: 5
+
+Example:
+
+```python
+validation_data = model.simulate(32)
+history = model.train_workflow(
+    max_epochs=5,
+    n_batch=10,
+    validation_data=validation_data,
+    file="saved_workflows/simple.keras",
+)
+```
+
+### Simple workflow methods
+
+#### SimpleWorkflow.sample_posterior
+
+::: bami.workflows.simple.SimpleWorkflow.sample_posterior
+    options:
+      show_root_heading: true
+      show_root_toc_entry: false
+      heading_level: 5
+
+Example:
+
+```python
+test_data = model.simulate(4)
+samples = model.sample_posterior(test_data, num_samples=200)
+print(samples["c"].shape)
+```
+
+### Hierarchical workflow methods
+
+Use these methods for group posterior sampling and the current subject-level
+point-estimate path.
+
+#### HierarchicalWorkflow.sample_group_posterior
+
+::: bami.workflows.hierarchical.HierarchicalWorkflow.sample_group_posterior
+    options:
+      show_root_heading: true
+      show_root_toc_entry: false
+      heading_level: 5
+
+Example:
+
+```python
+test_data = model.simulate(4)
+group_samples = model.sample_group_posterior(
+    test_data=test_data,
+    num_samples=200,
+)
+print(group_samples["c_mu"].shape)
+```
+
+#### HierarchicalWorkflow.train_random_estimator
+
+::: bami.workflows.hierarchical.HierarchicalWorkflow.train_random_estimator
+    options:
+      show_root_heading: true
+      show_root_toc_entry: false
+      heading_level: 5
+
+Example:
+
+```python
+model.train_random_estimator(
+    max_epochs=20,
+    file="saved_workflows/random_estimator.pt",
+)
+```
+
+#### HierarchicalWorkflow.estimate_random_parameter
+
+::: bami.workflows.hierarchical.HierarchicalWorkflow.estimate_random_parameter
+    options:
+      show_root_heading: true
+      show_root_toc_entry: false
+      heading_level: 5
+
+Example:
+
+```python
+subject_estimates = model.estimate_random_parameter(
+    observed_data=test_data,
+    group_samples=group_samples,
+)
+print(subject_estimates.head())
+```
+
+### Legacy subject posterior workflow
+
+Use these methods only when you need subject-level posterior draws. For
+ordinary subject-level recovery, prefer `train_random_estimator(...)` and
+`estimate_random_parameter(...)`.
+
+#### HierarchicalWorkflow.train_random_workflow
+
+::: bami.workflows.hierarchical.HierarchicalWorkflow.train_random_workflow
+    options:
+      show_root_heading: true
+      show_root_toc_entry: false
+      heading_level: 5
+
+Example:
+
+```python
+model.train_random_workflow(
+    max_epochs=20,
+    validation_data=32,
+    file="saved_workflows/random_workflow.keras",
+)
+```
+
+#### HierarchicalWorkflow.sample_random_posterior
+
+::: bami.workflows.hierarchical.HierarchicalWorkflow.sample_random_posterior
+    options:
+      show_root_heading: true
+      show_root_toc_entry: false
+      heading_level: 5
+
+Example:
+
+```python
+subject_samples = model.sample_random_posterior(
+    observed_data=test_data,
+    group_samples=group_samples,
+)
+print(subject_samples["c"].shape)
+```
+
+## Argument lookup
+
+| Argument | Used in | Quick meaning | More detail |
+| --- | --- | --- | --- |
+| `priors` | both workflows | Parameters to estimate plus fixed simulator constants. | [Priors](../articles/priors.md) |
+| `simulator` | both workflows | Function that receives public parameter values and `n_trials`. | [Simulators](../articles/simulators.md) |
+| `observation` | both workflows | `"aggregate"` for one summary row; `"trial"` for one row per trial. | [Simulators](../articles/simulators.md) |
+| `obs_names` | both workflows | Names for simulator output columns, in returned order. | [Simulators](../articles/simulators.md) |
+| `simulator_kwargs` | both workflows | Fixed technical options passed to the simulator. | [Simulators](../articles/simulators.md) |
+| `n_trials` | both workflows | Fixed trial count, or a variable range `(low, high)` with an exclusive upper bound. | [Workflow structure](../articles/advanced-workflows.md) |
+| `n_subjects` | hierarchical only | Fixed subject count, or a variable range `(low, high)` with an exclusive upper bound. | [Workflow structure](../articles/advanced-workflows.md) |
+| `input_format` | both workflows | Optional encoder for aggregate rows, often used to include trial count. | [Input formats](inputs/formats.md) |
+| `device` | both workflows | Runtime device: `"cpu"`, `"mps"`, or `"cuda"`. | [Runtime](inference/checkpoints-runtime.md) |
+
+## Related guides
+
+- [Build and check a simple SDM workflow](../articles/sdm-fixed-simple.md)
+- [Fit a hierarchical ezDM workflow](../examples/hierarchical-ezdm.md)
+- [Choose the right workflow structure](../articles/advanced-workflows.md)
+- [Write a simulator for your own model](../articles/simulators.md)
+- [Choose priors and links for model parameters](../articles/priors.md)

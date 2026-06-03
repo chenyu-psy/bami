@@ -3,6 +3,7 @@
 import numpy as np
 
 from fixtures_model_specs import M3_SPEC, m3_activation
+from bami.inputs import counts
 from bami.simulators.m3 import simulate_m3_custom
 from bami.workflows import SimpleWorkflow
 
@@ -22,10 +23,13 @@ def test_flex_simple_simulator_adds_total_response_feature():
             "n_options": M3_SPEC["n_options"],
             "rule": M3_SPEC["rule"],
         },
-        data_width=len(M3_SPEC["activation_contract"]["order"]),
-        n_trials=None,
-        n_trials_range=(5, 9),
-        include_trial_feature=True,
+        obs_names=M3_SPEC["activation_contract"]["order"],
+        n_trials=(5, 9),
+        input_format=counts(
+            add_n=True,
+            n_range=(5, 9),
+            n_transform="divide_by_high_minus_one",
+        ),
     )
 
     sim = model.workflow.simulate(10)
@@ -34,6 +38,6 @@ def test_flex_simple_simulator_adds_total_response_feature():
     count_sums = data[:, :, :5].sum(axis=-1)
 
     assert data.shape == (10, 1, 6)
-    assert np.all(totals >= 5)
-    assert np.all(totals < 9)
-    assert np.array_equal(totals, count_sums)
+    assert np.all(totals >= 5 / 8)
+    assert np.all(totals <= 1)
+    assert np.allclose(totals, count_sums / 8)
