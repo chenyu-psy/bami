@@ -66,7 +66,9 @@ Detailed guides and API references are available at
 
 Useful starting points:
 
-- [Simple SDM workflow](https://chenyu-psy.github.io/bami/examples/simple-sdm/)
+- [Complete SDM example](https://chenyu-psy.github.io/bami/articles/sdm-fixed-simple/)
+- [Simulators](https://chenyu-psy.github.io/bami/articles/simulators/)
+- [Priors](https://chenyu-psy.github.io/bami/articles/priors/)
 - [Hierarchical ezDM workflow](https://chenyu-psy.github.io/bami/examples/hierarchical-ezdm/)
 - [Workflow reference](https://chenyu-psy.github.io/bami/api/workflows/)
 - [Evaluation metrics](https://chenyu-psy.github.io/bami/api/evaluation/metrics/)

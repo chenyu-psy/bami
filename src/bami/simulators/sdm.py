@@ -19,7 +19,6 @@ def simulate_sdm_simple(
     c: float,
     kappa: float,
     n_trials: int = 100,
-    rng=None,
 ) -> np.ndarray:
     """Simulate continuous trial-level SDM errors in radians.
 
@@ -27,8 +26,6 @@ def simulate_sdm_simple(
         c: Public-scale SDM activation strength.
         kappa: Public-scale concentration of the circular similarity kernel.
         n_trials: Number of trial-level errors to simulate.
-        rng (numpy.random.Generator | None): Optional NumPy random generator. Defaults to ``np.random`` so
-            existing project-level seeding remains effective.
 
     Returns:
         numpy.ndarray: Trial-level signed circular errors in radians with
@@ -38,25 +35,22 @@ def simulate_sdm_simple(
     checked_c = _check_positive_float(c, "c")
     checked_kappa = _check_positive_float(kappa, "kappa")
     checked_trials = check_n_trials(n_trials)
-    rng = np.random if rng is None else rng
 
     errors = _sample_sdm_errors(
         c=checked_c,
         kappa=checked_kappa,
         n_trials=checked_trials,
-        rng=rng,
     )
     return np.asarray(errors, dtype=np.float32).reshape(-1, 1)
 
 
-def _sample_sdm_errors(c: float, kappa: float, n_trials: int, rng) -> np.ndarray:
+def _sample_sdm_errors(c: float, kappa: float, n_trials: int) -> np.ndarray:
     """Draw signed radian errors from the continuous SDM density.
 
     Args:
         c: Validated SDM activation strength.
         kappa: Validated SDM concentration parameter.
         n_trials: Number of errors to draw.
-        rng: NumPy-compatible random generator.
 
     Returns:
         numpy.ndarray: One-dimensional array of signed radian errors.
@@ -65,7 +59,7 @@ def _sample_sdm_errors(c: float, kappa: float, n_trials: int, rng) -> np.ndarray
     support = np.linspace(-np.pi, np.pi, _SUPPORT_SIZE + 1)
     density = _sdm_density_unnormalized(support, c=c, kappa=kappa)
     cdf = _trapezoid_cdf(support, density)
-    draws = rng.uniform(0.0, cdf[-1], size=n_trials)
+    draws = np.random.uniform(0.0, cdf[-1], size=n_trials)
     errors = np.interp(draws, cdf, support)
     return _wrap_radians(errors)
 

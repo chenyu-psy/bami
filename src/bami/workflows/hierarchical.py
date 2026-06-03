@@ -585,37 +585,22 @@ class HierarchicalWorkflow:
             ``link`` for stochastic parameters. Scalar entries are subject-level
             constants.
         simulator: Function called as
-            ``simulator(**params, n_trials=..., rng=..., **simulator_kwargs)``.
+            ``simulator(**params, n_trials=..., **simulator_kwargs)``.
         observation: Use ``"aggregate"`` when the simulator returns one
             fixed-width row per subject, or ``"trial"`` for one row per trial.
         simulator_kwargs: Constant keyword arguments passed to ``simulator``
             on every simulation.
-        data_width: Number of simulator features before optional design
-            columns. For new code, prefer ``obs_names``.
-        obs_names: Names of simulator output columns. When supplied,
-            ``data_width`` is inferred from ``len(obs_names)``.
-        n_subjects: Fixed subject count. Provide this or
-            ``n_subjects_range``, but not both.
-        n_subjects_range: Range ``(low, high)``; subject counts are drawn
-            from ``[low, high)``.
-        n_trials: Fixed trial count. Provide this or ``n_trials_range``, but
-            not both.
-        n_trials_range: Range ``(low, high)``; trial counts are drawn from
-            ``[low, high)``.
-        include_trial_feature: Whether to append the subject trial count to
-            each data row.
-        keep_subject_truth: Subject-level parameter names to save as
-            ``<param>_subj`` truth arrays. Use ``None`` for all stochastic subject
-            parameters, or ``[]`` for none.
-        raw_data_key: Optional output key for untransformed simulator rows.
-        row_transform: Optional function that formats one simulator row.
-        trial_feature_scale: Optional divisor for the trial-count feature.
+        obs_names: Names of simulator output columns. The workflow infers the
+            simulator row width from ``len(obs_names)``.
+        n_subjects: Fixed subject count, or a two-value range ``(low, high)``.
+            Range values draw subject counts from ``[low, high)``.
+        n_trials: Fixed trial count, or a two-value range ``(low, high)``.
+            Range values draw trial counts from ``[low, high)``.
         input_format: Optional helper that formats simulator rows and trial
             counts before padding and masking.
         summary_dim: Width of the summary network.
         n_coupling_layers: Number of coupling layers in the inference
             network.
-        transform_samples: Optional posterior transform function.
         device: Workflow runtime device. CPU is the stable default; use
             ``"mps"`` or ``"cuda"`` only when accelerator training is desired.
     """
@@ -628,23 +613,14 @@ class HierarchicalWorkflow:
         priors: Mapping,
         simulator: Callable,
         observation: str | None,
-        data_width: int | None = None,
         *,
         simulator_kwargs: Mapping | None = None,
         obs_names: Sequence[str] | None = None,
-        n_subjects: int | None = None,
-        n_subjects_range: Sequence[int] | None = None,
-        n_trials: int | None = None,
-        n_trials_range: Sequence[int] | None = None,
-        include_trial_feature: bool = False,
-        keep_subject_truth: Sequence[str] | None = None,
-        raw_data_key: str | None = None,
-        row_transform: Callable | None = None,
-        trial_feature_scale: float | None = None,
+        n_subjects: int | Sequence[int],
+        n_trials: int | Sequence[int],
         input_format: InputFormat | None = None,
         summary_dim: int = 64,
         n_coupling_layers: int = 10,
-        transform_samples: Callable | None = None,
         device: str | None = "cpu",
     ):
         self.device = validate_device(device)
@@ -659,48 +635,27 @@ class HierarchicalWorkflow:
             "simulator",
         )
         self.simulator_kwargs = dict(simulator_kwargs or {})
-        self.obs_names = SimpleWorkflow._resolve_obs_names(obs_names, data_width)
-        if self.obs_names is None:
-            self.data_width = SimpleWorkflow._check_positive_int(
-                data_width, "data_width"
-            )
-            self.obs_names = [f"x{i}" for i in range(self.data_width)]
-        else:
-            self.data_width = len(self.obs_names)
+        self.obs_names = SimpleWorkflow._resolve_obs_names(obs_names)
+        self.data_width = len(self.obs_names)
         (
             self.subject_design,
             self.n_subjects,
             self.n_subjects_range,
-        ) = self._resolve_design_count(
-            fixed_value=n_subjects,
-            range_value=n_subjects_range,
-            fixed_name="n_subjects",
-            range_name="n_subjects_range",
-        )
+        ) = SimpleWorkflow._resolve_count(n_subjects, "n_subjects")
         self.trial_design, self.n_trials, self.n_trials_range = (
-            self._resolve_design_count(
-                fixed_value=n_trials,
-                range_value=n_trials_range,
-                fixed_name="n_trials",
-                range_name="n_trials_range",
-            )
+            SimpleWorkflow._resolve_trials(n_trials)
         )
         self.max_subjects = self._resolve_max_subjects()
         self.max_trials = self._resolve_max_trials()
-        self.include_trial_feature = bool(include_trial_feature)
         self.include_mask = (
             self.subject_design == "flex" and self.observation == "aggregate"
         )
-        self.keep_subject_truth = self._resolve_keep_subject_truth(keep_subject_truth)
-        self.raw_data_key = raw_data_key
-        self.row_transform = row_transform
-        self.trial_feature_scale = trial_feature_scale
+        self.subject_truth_names = self._subject_truth_names()
         self.input_format = SimpleWorkflow._check_input_format(input_format)
         self.workflow_family = f"{self.subject_design}_hierarchical"
         self.subject_id_mode = "exchangeable"
         self.summary_dim = int(summary_dim)
         self.n_coupling_layers = int(n_coupling_layers)
-        self._transform_samples = transform_samples
 
         with runtime_device(self.device):
             self._build_workflow()
@@ -722,36 +677,15 @@ class HierarchicalWorkflow:
 
         return self._draw_group_prior_from_spec(self.priors, rng)
 
-    def _resolve_keep_subject_truth(
-        self,
-        keep_subject_truth: Sequence[str] | None,
-    ) -> list[str]:
-        """Return validated subject-level truth names to store.
-
-        Args:
-            keep_subject_truth:
-                ``None`` to store all stochastic subject-level parameters, an empty
-                sequence to store none, or a sequence of parameter names to store.
+    def _subject_truth_names(self) -> list[str]:
+        """Return stochastic subject-level parameters saved during simulation.
 
         Returns:
-            list[str]: Parameter names that simulation should save as ``<param>_subj``.
+            list[str]: Prior names whose subject-level simulated values are
+            saved as ``<param>_subj`` truth arrays for recovery diagnostics.
         """
 
-        stochastic_names = [
-            name for name, spec in self.priors.items() if isinstance(spec, dict)
-        ]
-        if keep_subject_truth is None:
-            return stochastic_names
-
-        names = list(keep_subject_truth)
-        missing = [name for name in names if name not in stochastic_names]
-        if missing:
-            raise ValueError(
-                "keep_subject_truth contains parameters that are not stochastic "
-                f"subject-level prior keys: {missing}. Available parameters: "
-                f"{stochastic_names}"
-            )
-        return names
+        return [name for name, spec in self.priors.items() if isinstance(spec, dict)]
 
     def _draw_independent_subject_params(
         self,
@@ -879,35 +813,6 @@ class HierarchicalWorkflow:
                 subject_params[param_name] = float(spec)
         return subject_params
 
-    @classmethod
-    def _resolve_design_count(
-        cls,
-        fixed_value: int | None,
-        range_value: Sequence[int] | None,
-        fixed_name: str,
-        range_name: str,
-    ) -> tuple[str, int | None, tuple[int, int] | None]:
-        """Validate one fixed-or-flexible design count.
-
-        Args:
-            fixed_value: Fixed count value, or ``None`` when using a range.
-            range_value: Two-value range, or ``None`` when using a fixed count.
-            fixed_name: Setting name used for the fixed count in error messages.
-            range_name: Setting name used for the range in error messages.
-
-        Returns:
-            tuple[str, int | None, tuple[int, int] | None]: Design label and validated count settings.
-        """
-
-        if fixed_value is not None and range_value is not None:
-            raise ValueError(f"Provide either {fixed_name} or {range_name}, not both.")
-        if fixed_value is None and range_value is None:
-            raise ValueError(f"Provide one of {fixed_name} or {range_name}.")
-        if range_value is not None:
-            return "flex", None, SimpleWorkflow._check_range(range_value, range_name)
-        checked = SimpleWorkflow._check_positive_int(fixed_value, fixed_name)
-        return "fixed", checked, None
-
     def _resolve_max_subjects(self) -> int:
         """Return the padded subject-row count for simulated datasets.
 
@@ -966,8 +871,6 @@ class HierarchicalWorkflow:
         """
 
         width = self._encoded_data_width()
-        if self.input_format is None and self.include_trial_feature:
-            width += 1
         if self.include_mask:
             width += 1
         return width
@@ -996,20 +899,17 @@ class HierarchicalWorkflow:
             return self.data_width
         return self.input_format.output_width(self.data_width)
 
-    def _format_trial_feature(self, n_trials: int) -> float:
-        """Return the trial-count feature for one subject row.
-
-        Args:
-            n_trials:
-                Number of responses for the subject.
+    def _raw_output_key(self) -> str | None:
+        """Return the optional key for preserving raw simulator rows.
 
         Returns:
-            float: Raw or scaled trial count depending on workflow settings.
+            str or None: Output key from ``input_format.keep_raw_as`` when the
+            configured input format requests raw diagnostic rows.
         """
 
-        if self.trial_feature_scale is None:
-            return float(n_trials)
-        return float(n_trials) / float(self.trial_feature_scale)
+        if self.input_format is None:
+            return None
+        return self.input_format.keep_raw_as
 
     def _simulate_dataset(self, **group_params) -> dict[str, np.ndarray]:
         """Simulate one group-level dataset.
@@ -1045,14 +945,15 @@ class HierarchicalWorkflow:
         )
         data = np.zeros((self.max_subjects, self._feature_width()), dtype=np.float32)
         raw_data = None
-        if self.raw_data_key is not None:
+        raw_key = self._raw_output_key()
+        if raw_key is not None:
             raw_data = np.zeros(
                 (self.max_subjects, self.data_width),
                 dtype=np.float32,
             )
         subj_truth = {
             name: np.full(self.max_subjects, np.nan, dtype=np.float32)
-            for name in self.keep_subject_truth
+            for name in self.subject_truth_names
         }
 
         for subject_id in range(n_subjects):
@@ -1066,7 +967,6 @@ class HierarchicalWorkflow:
             row = self._simulator_fn(
                 **params,
                 n_trials=n_trials,
-                rng=np.random,
                 **self.simulator_kwargs,
             )
             row_arr = np.asarray(row, dtype=np.float32)
@@ -1083,34 +983,21 @@ class HierarchicalWorkflow:
                         "input_format must return a row with shape "
                         f"({self._encoded_data_width()},)."
                     )
-            elif self.row_transform is not None:
-                row_arr = np.asarray(
-                    self.row_transform(row_arr, n_trials=n_trials, model=self),
-                    dtype=np.float32,
-                )
-                if row_arr.shape != (self.data_width,):
-                    raise ValueError(
-                        "row_transform must return a row with shape "
-                        f"({self.data_width},)."
-                    )
 
             col = 0
             encoded_width = self._encoded_data_width()
             data[subject_id, col : col + encoded_width] = row_arr
             col += encoded_width
-            if self.input_format is None and self.include_trial_feature:
-                data[subject_id, col] = self._format_trial_feature(n_trials)
-                col += 1
             if self.include_mask:
                 data[subject_id, col] = 1.0
-            for param_name in self.keep_subject_truth:
+            for param_name in self.subject_truth_names:
                 if param_name in params:
                     subj_truth[param_name][subject_id] = float(params[param_name])
 
         out = dict(group_params)
         out["data"] = data
-        if self.raw_data_key is not None:
-            out[self.raw_data_key] = raw_data
+        if raw_key is not None:
+            out[raw_key] = raw_data
         for param_name, values in subj_truth.items():
             out[f"{param_name}_subj"] = values
         if self.subject_design == "flex":
@@ -1141,7 +1028,7 @@ class HierarchicalWorkflow:
         )
         subj_truth = {
             name: np.full(self.max_subjects, np.nan, dtype=np.float32)
-            for name in self.keep_subject_truth
+            for name in self.subject_truth_names
         }
 
         for subject_id in range(n_subjects):
@@ -1155,7 +1042,6 @@ class HierarchicalWorkflow:
             rows = self._simulator_fn(
                 **params,
                 n_trials=n_trials,
-                rng=np.random,
                 **self.simulator_kwargs,
             )
             rows_arr = np.asarray(rows, dtype=np.float32)
@@ -1171,7 +1057,7 @@ class HierarchicalWorkflow:
             data[subject_id, :n_trials, : self.data_width] = rows_arr
             if self.trial_design == "flex":
                 data[subject_id, :n_trials, self.data_width] = 1.0
-            for param_name in self.keep_subject_truth:
+            for param_name in self.subject_truth_names:
                 if param_name in params:
                     subj_truth[param_name][subject_id] = float(params[param_name])
 
@@ -1264,8 +1150,6 @@ class HierarchicalWorkflow:
         """
 
         width = self._encoded_data_width()
-        if self.input_format is None and self.include_trial_feature:
-            width += 1
         return width
 
     def _simulate_random_subject(self, **params) -> dict[str, np.ndarray]:
@@ -1305,7 +1189,6 @@ class HierarchicalWorkflow:
         row = self._simulator_fn(
             **subject_params,
             n_trials=n_trials,
-            rng=np.random,
             **self.simulator_kwargs,
         )
         row_arr = np.asarray(row, dtype=np.float32)
@@ -1315,18 +1198,6 @@ class HierarchicalWorkflow:
             )
         if self.input_format is not None:
             row_arr = self.input_format.encode(row_arr, n_trials)
-        elif self.row_transform is not None:
-            row_arr = np.asarray(
-                self.row_transform(row_arr, n_trials=n_trials, model=self),
-                dtype=np.float32,
-            )
-        if self.input_format is None and self.include_trial_feature:
-            row_arr = np.concatenate(
-                [
-                    row_arr,
-                    np.array([self._format_trial_feature(n_trials)], dtype=np.float32),
-                ]
-            )
         expected_width = self._random_aggregate_feature_width()
         if row_arr.shape != (expected_width,):
             raise ValueError(
@@ -1355,7 +1226,6 @@ class HierarchicalWorkflow:
         rows = self._simulator_fn(
             **subject_params,
             n_trials=n_trials,
-            rng=np.random,
             **self.simulator_kwargs,
         )
         rows_arr = np.asarray(rows, dtype=np.float32)
@@ -1504,8 +1374,6 @@ class HierarchicalWorkflow:
         if self.observation == "aggregate":
             if self.input_format is not None and self.input_format.add_n:
                 names.append("n_trials")
-            elif self.include_trial_feature:
-                names.append("n_trials")
             if self.include_mask:
                 names.append("active_subject")
         elif self.trial_design == "flex":
@@ -1537,19 +1405,20 @@ class HierarchicalWorkflow:
         )
 
     def convert_posterior(self, samples: dict) -> dict:
-        """Transform posterior samples when a transform function is supplied.
+        """Add public-scale hierarchical parameter samples.
 
         Args:
             samples: Raw posterior sample dictionary from BayesFlow.
 
         Returns:
-            dict: Transformed posterior samples, or the original samples when
-                no transform was supplied.
+            dict: Posterior samples with public group keys such as
+                ``theta_mu`` and ``theta_sigma`` added when raw keys are
+                present.
         """
 
-        if self._transform_samples is None:
-            return samples
-        return self._transform_samples(samples, self.priors)
+        from bami.inference.priors import transform_hierarchical_samples
+
+        return transform_hierarchical_samples(samples, self.priors)
 
     def convert_random_posterior(self, samples: dict) -> dict:
         """Return random-workflow samples without changing the ``z`` scale.
@@ -2052,7 +1921,7 @@ class HierarchicalWorkflow:
         if arr.shape[-2] > self.max_trials:
             raise ValueError(
                 "trial observed_data has more trials than this model supports. "
-                f"Expected at most {self.max_trials} trials from n_trials_range."
+                f"Expected at most {self.max_trials} trials from n_trials."
             )
         out = np.zeros(
             (arr.shape[0], arr.shape[1], self.max_trials, self._trial_feature_width()),
@@ -2102,7 +1971,7 @@ class HierarchicalWorkflow:
                     raise ValueError(
                         "trial observed_data has more trials than this model "
                         f"supports. Expected at most {self.max_trials} trials "
-                        "from n_trials_range."
+                        "from n_trials."
                     )
                 out[
                     dataset_id,
@@ -2344,9 +2213,9 @@ class HierarchicalWorkflow:
 
         The method simulates group datasets, samples group posteriors, estimates
         subject-level random effects with ``estimate_random_parameter``, and
-        plots one recovery metric per simulated dataset and parameter. It
-        requires ``keep_subject_truth`` so the simulation contains subject-level
-        true values.
+        plots one recovery metric per simulated dataset and parameter.
+        Hierarchical simulations save stochastic subject-level true values as
+        ``<param>_subj`` arrays for this diagnostic.
 
         Args:
             n_datasets: Number of simulated group datasets used for the
@@ -2402,13 +2271,17 @@ class HierarchicalWorkflow:
         subject_ids = list(range(arr.shape[0])) if arr.ndim == 2 else []
         if self.input_format is not None and self.input_format.add_n:
             expected_width = self.data_width + 1
-            if arr.ndim != 2 or arr.shape[1] != expected_width:
+            can_infer_n = self.input_format.kind in {"counts", "counts_as_proportions"}
+            if arr.ndim == 2 and arr.shape[1] == expected_width:
+                n_trials_values = arr[:, -1]
+                arr = arr[:, : self.data_width]
+            elif arr.ndim == 2 and can_infer_n and arr.shape[1] == self.data_width:
+                n_trials_values = arr.sum(axis=1)
+            else:
                 raise ValueError(
                     "counts must include base features plus n_trials when "
                     "input_format encodes n."
                 )
-            n_trials_values = arr[:, -1]
-            arr = arr[:, : self.data_width]
         else:
             if arr.ndim != 2 or arr.shape[1] != self.data_width:
                 raise ValueError(
@@ -2432,18 +2305,10 @@ class HierarchicalWorkflow:
             row_arr = row
             if self.input_format is not None:
                 row_arr = self.input_format.encode(row, n_trials)
-            elif self.row_transform is not None:
-                row_arr = np.asarray(
-                    self.row_transform(row, n_trials=n_trials, model=self),
-                    dtype=np.float32,
-                )
             col = 0
             encoded_width = self._encoded_data_width()
             data[0, subject_id, col : col + encoded_width] = row_arr
             col += encoded_width
-            if self.input_format is None and self.include_trial_feature:
-                data[0, subject_id, col] = self._format_trial_feature(n_trials)
-                col += 1
             if self.include_mask:
                 data[0, subject_id, col] = 1.0
         return data, subject_ids

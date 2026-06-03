@@ -29,7 +29,7 @@ def _build_ezdm_model(n_trials: int = 50) -> SimpleWorkflow:
         simulator=simulate_ezdm_simple,
         observation="aggregate",
         simulator_kwargs={"s": EZDM_SPEC["scaling"]},
-        data_width=len(EZDM_SPEC["summary_contract"]["order"]),
+        obs_names=EZDM_SPEC["summary_contract"]["order"],
         n_trials=n_trials,
         summary_dim=4,
         n_coupling_layers=2,
@@ -100,7 +100,6 @@ def test_ezdm_workflow_simulator_expansion_matches_preset_summary():
     from_workflow = model._simulator_fn(
         **params,
         n_trials=50,
-        rng=np.random,
         **model.simulator_kwargs,
     )
 
@@ -109,7 +108,6 @@ def test_ezdm_workflow_simulator_expansion_matches_preset_summary():
         **params,
         n_trials=50,
         s=EZDM_SPEC["scaling"],
-        rng=np.random,
     )
 
     assert from_workflow.shape == (3,)

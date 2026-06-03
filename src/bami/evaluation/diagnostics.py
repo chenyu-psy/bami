@@ -506,19 +506,18 @@ def _random_recovery_params(model, simulated_data, estimates, params) -> list[st
         list[str]: Subject-level public parameter names to plot.
     """
 
-    kept = list(getattr(model, "keep_subject_truth", []))
-    if not kept:
+    subject_truth_names = [
+        key.removesuffix("_subj")
+        for key in simulated_data
+        if key.endswith("_subj") and key.removesuffix("_subj") in estimates.columns
+    ]
+    if not subject_truth_names:
         raise ValueError(
-            "plot_random_recovery requires keep_subject_truth so simulated "
-            "subject values are available."
+            "plot_random_recovery requires simulated subject truth arrays named "
+            "<param>_subj and matching estimate columns."
         )
 
-    available = []
-    for name in kept:
-        truth_key = f"{name}_subj"
-        if truth_key in simulated_data and name in estimates.columns:
-            available.append(name)
-    return _select_available_params(available, params, label="random")
+    return _select_available_params(subject_truth_names, params, label="random")
 
 
 def plot_parameter_recovery(
@@ -738,9 +737,8 @@ def plot_random_recovery(
     This diagnostic simulates group datasets, samples group posteriors, estimates
     subject-level random effects, and computes one recovery metric per simulated
     dataset and parameter. The random estimator is deterministic and does not
-    return posterior draws. The model must save subject truth with
-    ``keep_subject_truth`` so the simulated ``<param>_subj`` values are available
-    for scoring.
+    return posterior draws. The simulated data must contain subject truth arrays
+    named ``<param>_subj`` for scoring.
 
     Args:
         model (HierarchicalWorkflow): ``HierarchicalWorkflow`` instance used to simulate group

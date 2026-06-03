@@ -4,11 +4,18 @@ Use these functions when aggregate workflow inputs need to carry trial-count
 information explicitly.
 """
 
-from .formats import InputFormat, aggregate_summary, counts, proportions
+from .formats import (
+    InputFormat,
+    aggregate_summary,
+    counts,
+    counts_as_proportions,
+    proportions,
+)
 
 __all__ = [
     "InputFormat",
     "aggregate_summary",
     "counts",
+    "counts_as_proportions",
     "proportions",
 ]
