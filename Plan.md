@@ -299,50 +299,102 @@ then debugs and validates the current package before new 0.3.0 features begin.
   `uv run mkdocs build`, and `uv build`.
 - No unresolved compatibility gaps are recorded for this milestone.
 
-## Milestone 0.2.3: Simple Aggregate Warning Cleanup
+## Milestone 0.2.3: Simulator Contract and Website Article
 
-Completed for the current `SimpleWorkflow` contract. This milestone addresses
-the user-facing singleton softmax warning seen during fixed-simple aggregate
-training, such as ezDM fixed-simple training in `2026-bayesflow-Ind`.
+In progress as a compatibility and documentation cleanup. This milestone
+simplifies the workflow extension points so user-provided simulators and
+posterior conversion follow one clear package contract. It also reorganizes the
+website around tutorial articles before API reference pages, so researchers can
+learn the simulator-first workflow without reading internals first.
 
-### 1. Decision
+### 1. RNG Compatibility Cleanup
 
-- Fixed-simple aggregate workflows produce singleton summary data shaped
-  `batch x 1 x features`.
-- `SimpleWorkflow` continues to use BayesFlow's built-in `DeepSet` summary
-  network. A temporary comparison against a custom aggregate MLP showed that
-  the MLP removed the warning and trained faster, but the existing `DeepSet`
-  gave better quick parameter-recovery correlations in the tested smoke runs.
-- The warning is benign for singleton aggregate data because DeepSet attention
-  is applying softmax over a set axis of length one. It is still confusing in
-  researcher-facing notebooks, so the package now suppresses only this specific
-  warning in the relevant simple aggregate paths.
+- `SimpleWorkflow` and `HierarchicalWorkflow` now call simulators with only
+  public parameter values, `n_trials`, and `simulator_kwargs`.
+- Workflow-level automatic `rng` injection has been removed. The current
+  contract intentionally avoids `rng_param`, `seed_param`, signature
+  inspection, and auto-detection logic.
+- Public `rng` arguments have been removed from the built-in SDM, ezDM, and M3
+  simulator APIs. These simulators now use NumPy global randomness internally.
+- Documentation now describes reproducibility through global seeding, for
+  example `np.random.seed(...)`, rather than workflow-injected RNG objects.
+- Tests and toy simulators are being updated so simulator functions do not need
+  to accept `rng`.
+- Third-party simulator compatibility remains the main reason for this change:
+  a simulator only needs to accept model parameter keywords and `n_trials`.
 
-### 2. Implementation
+### 2. Posterior Conversion Cleanup
 
-- Added a private warning context manager in `bami.workflows.simple` that
-  filters only the Keras message about softmax over an axis of size one.
-- Applied the filter only when `SimpleWorkflow.observation == "aggregate"` and
-  only around `train_workflow(...)`, `sample_posterior(...)`, and
-  `plot_parameter_recovery(...)`.
-- Kept notebook code unchanged and did not suppress warnings globally.
-- Kept simple trial workflows and hierarchical workflows unchanged.
+- The optional `transform_samples` constructor argument has been removed from
+  `SimpleWorkflow` and `HierarchicalWorkflow`.
+- `SimpleWorkflow.convert_posterior(...)` now always uses the package's
+  standard simple posterior transform.
+- `HierarchicalWorkflow.convert_posterior(...)` now always uses the package's
+  standard hierarchical posterior transform.
+- This keeps posterior conversion teachable: users receive workflow sampling
+  dictionaries with public-scale parameter keys added by the built-in
+  transform, and dataframe conversion remains a separate explicit step.
+- Custom posterior-transform hooks are not part of the current public workflow
+  contract. Future extension points should be added only if a concrete user
+  workflow needs them and the documentation can explain them simply.
 
-### 3. Validation
+### 3. Website Structure
 
-- Added regression coverage that confirms the filter hides the singleton
-  softmax warning when enabled, leaves it visible when disabled, and does not
-  hide ordinary `UserWarning`s.
-- Focused tests passed in the `bami` package:
-  `KERAS_BACKEND=torch uv run pytest tests/test_fixed_simple_workflow.py tests/test_ezdm_fixed_simple.py tests/test_train_workflow_saved_workflow.py`.
-- A small ezDM aggregate train-and-sample smoke run from the analysis project
-  reported `softmax_warning_count=0` while preserving data shape `(4, 1, 3)`.
+- `mkdocs.yml` now has an `Articles` section with navigation indexes enabled.
+- The old standalone simple SDM example page has moved into
+  `docs/articles/sdm-fixed-simple.md`.
+- New article pages cover:
+  `docs/articles/index.md`,
+  `docs/articles/sdm-fixed-simple.md`,
+  `docs/articles/simulators.md`,
+  `docs/articles/priors.md`, and
+  `docs/articles/advanced-workflows.md`.
+- `README.md` now links to the complete SDM article, simulator article, prior
+  article, hierarchical ezDM example, workflow reference, and evaluation
+  metrics.
+- `docs/index.md` now starts with a minimal SDM workflow that simulates,
+  trains or loads, samples posterior parameters, and runs a recovery
+  diagnostic.
+- `docs/api/index.md` now explains that API simulator pages document only the
+  built-in simulators and links researchers to the simulator article for
+  custom simulator examples.
+- `docs/api/workflows.md` now describes simulator calls without `rng`, removes
+  the obsolete `transform_samples` example, and links to the new prior and
+  simulator articles.
+
+### 4. User-Created Simulator Article
+
+- `docs/articles/simulators.md` explains the minimal simulator call:
+  `simulator(**params, n_trials=n_trials, **simulator_kwargs)`.
+- The article uses a hand-written no-bias ezDM aggregate simulator so the
+  example stays close to an existing built-in simulator while making the data
+  flow visible.
+- The example returns one fixed-width NumPy row, `[pc, mrt, vrt]`, and then
+  connects that simulator to `SimpleWorkflow(observation="aggregate")`.
+- The article explains the expected aggregate shape `(n_datasets, 1, features)`
+  and how `obs_names` should follow the returned feature order.
+- Fixed model settings are documented in two researcher-facing forms: scalar
+  entries in `priors` for model constants and `simulator_kwargs` for technical
+  implementation options.
+- External simulator packages are intentionally not part of the current article
+  draft. A future article can add a PyDDM or other package wrapper after its API
+  has been checked and the example can stay short, explicit, and optional.
+
+### 5. Validation and Remaining Checks
+
+- Source changes require package checks before this milestone is marked
+  complete.
+- Run `uv run pytest` to validate simulator and workflow contract changes.
+- Run `uv run ruff check .` and `uv run black --check .` to validate style.
+- Run `uv run mkdocs build` to confirm the new article navigation and links.
+- Review rendered docs for researcher-friendly wording: clear function
+  signatures, explicit shapes, and no unnecessary BayesFlow internals.
 
 ## Milestone 0.3.0: MultiConditionWorkflow
 
 Start this milestone only after 0.2.1 workflow-wide API alignment, 0.2.2
-BayesFlow-Ind compatibility validation, and 0.2.3 summary-network cleanup are
-complete.
+BayesFlow-Ind compatibility validation, and 0.2.3 RNG compatibility and
+simulator website article work are complete.
 
 This milestone adds `MultiConditionWorkflow` for aggregate multi-condition
 hierarchical models. The workflow is parallel to `HierarchicalWorkflow`, not an
@@ -357,9 +409,8 @@ subject-level raw-effect correlations.
 - Keep `SimpleWorkflow` separate because simple workflows do not have a
   subject-level correlation structure.
 - Keep simulator calls condition-agnostic. The workflow chooses parameter
-  values for each condition cell, calls
-  `simulator(**params, n_trials=..., rng=...)`, and stores the returned row in
-  the matching condition cell.
+  values for each condition cell, calls `simulator(**params, n_trials=...)`,
+  and stores the returned row in the matching condition cell.
 - Preserve the condition axis in simulated data:
   `sim["data"].shape == (n_datasets, n_subjects, n_condition_cells,
   feature_width)`.
@@ -770,7 +821,7 @@ Completed.
 - Added clearer prior documentation for the current `mean` / `sd` / `link`
   format, including fixed simulator constants and supported link functions.
 - Simplified the SDM simulator API around continuous signed circular errors in
-  radians: `simulate_sdm_simple(c, kappa, n_trials=100, rng=None)`.
+  radians: `simulate_sdm_simple(c, kappa, n_trials=100)`.
 - Removed the old SDM degree-bin user interface, including `GRID_SIZE`,
   `grid_size`, `error_scale`, `jitter`, `sdm_probs`, and degree/index helper
   exports.

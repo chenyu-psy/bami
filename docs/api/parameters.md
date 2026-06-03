@@ -51,8 +51,7 @@ group_samples = model.sample_group_posterior(
 )
 ```
 
-The workflow applies its public-scale posterior conversion through
-the configured `convert_posterior(...)` method when one is available, so
+The workflow applies public-scale posterior conversion automatically, so
 returned samples use the parameter names and scales researchers normally
 interpret. Raw keys remain available in the same dictionary for workflow steps
 such as random-effect sampling.

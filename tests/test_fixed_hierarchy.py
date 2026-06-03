@@ -3,7 +3,7 @@
 import numpy as np
 
 from fixtures_model_specs import M3_SPEC, m3_activation
-from bami.inference import transform_hierarchical_samples
+from bami.inference.priors import log_sigma_key, mu_raw_key
 from bami.simulators.m3 import simulate_m3_custom
 from bami.workflows import HierarchicalWorkflow
 
@@ -35,7 +35,6 @@ def _build_fixed_hierarchy(**kwargs) -> HierarchicalWorkflow:
         },
         data_width=len(M3_SPEC["activation_contract"]["order"]),
         keep_subject_truth=keep_subject_truth,
-        transform_samples=transform_hierarchical_samples,
         **kwargs,
     )
 
@@ -92,6 +91,26 @@ def test_fixed_hierarchy_simulates_subject_truth():
     assert "a_subj_0" not in sim_data
 
 
+def test_fixed_hierarchy_transforms_public_group_parameters_by_default():
+    """Raw group posterior samples should gain public group parameter keys."""
+
+    model = _build_fixed_hierarchy(
+        n_subjects=2,
+        n_trials=5,
+    )
+    samples = {
+        mu_raw_key("a"): np.array([[0.0, 1.0]], dtype=np.float32),
+        log_sigma_key("a"): np.log(np.array([[0.5, 1.5]], dtype=np.float32)),
+    }
+
+    out = model.convert_posterior(samples)
+
+    assert "a_mu" in out
+    assert "a_sigma" in out
+    assert np.all(out["a_mu"] > 0)
+    assert np.allclose(out["a_sigma"], [[0.5, 1.5]])
+
+
 def test_hierarchy_keeps_all_subject_truth_by_default():
     """Default subject truth should include all stochastic hierarchy parameters."""
 
@@ -108,7 +127,6 @@ def test_hierarchy_keeps_all_subject_truth_by_default():
         data_width=len(M3_SPEC["activation_contract"]["order"]),
         n_subjects=2,
         n_trials=5,
-        transform_samples=transform_hierarchical_samples,
     )
 
     assert model.keep_subject_truth == ["a", "c", "ra", "rc"]

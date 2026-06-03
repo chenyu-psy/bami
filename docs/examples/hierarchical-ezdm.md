@@ -1,4 +1,4 @@
-# Hierarchical ezDM workflow
+# Fit a hierarchical ezDM workflow
 
 This example shows a complete hierarchical workflow:
 
@@ -21,7 +21,6 @@ import numpy as np
 import pandas as pd
 
 from bami.evaluation.metrics import aggregate_data, estimate_recovery
-from bami.inference import transform_hierarchical_samples
 from bami.simulators import simulate_ezdm_simple
 from bami.utils import posterior_to_dataframe
 from bami.workflows import HierarchicalWorkflow
@@ -46,7 +45,6 @@ model = HierarchicalWorkflow(
     n_trials=40,
     summary_dim=4,
     n_coupling_layers=2,
-    transform_samples=transform_hierarchical_samples,
 )
 ```
 
@@ -324,7 +322,6 @@ flex_model = HierarchicalWorkflow(
     input_format=aggregate_summary(n_range=(10, 14)),
     summary_dim=4,
     n_coupling_layers=2,
-    transform_samples=transform_hierarchical_samples,
 )
 
 flex_sim = flex_model.simulate(6)

@@ -9,13 +9,13 @@ from bami.simulators.ezdm import simulate_ezdm_simple
 def test_ezdm_simulator_matches_paper_example_moments():
     """The simulator should reproduce the EZ appendix moments before pc sampling."""
 
+    np.random.seed(2026)
     summary = simulate_ezdm_simple(
         v=0.1,
         a=0.14,
         t0=0.3,
         n_trials=100_000,
         s=0.1,
-        rng=np.random.default_rng(2026),
     )
 
     assert summary.shape == (3,)
@@ -24,24 +24,24 @@ def test_ezdm_simulator_matches_paper_example_moments():
     assert summary[2] == pytest.approx(0.112, abs=0.001)
 
 
-def test_ezdm_simulator_is_reproducible_with_explicit_rng():
-    """Repeated simulations with the same RNG seed should return the same row."""
+def test_ezdm_simulator_is_reproducible_with_global_seed():
+    """Repeated simulations with the same global seed should return the same row."""
 
+    np.random.seed(2026)
     first = simulate_ezdm_simple(
         v=0.1,
         a=0.14,
         t0=0.3,
         n_trials=50,
         s=0.1,
-        rng=np.random.default_rng(2026),
     )
+    np.random.seed(2026)
     second = simulate_ezdm_simple(
         v=0.1,
         a=0.14,
         t0=0.3,
         n_trials=50,
         s=0.1,
-        rng=np.random.default_rng(2026),
     )
 
     assert np.array_equal(first, second)
@@ -53,12 +53,12 @@ def test_ezdm_simulator_is_reproducible_with_explicit_rng():
 def test_ezdm_simulator_stays_finite_for_extreme_finite_parameters():
     """Extreme finite parameters should not create NaN summary values."""
 
+    np.random.seed(2026)
     summary = simulate_ezdm_simple(
         v=10,
         a=10,
         t0=0.2,
         n_trials=100,
-        rng=np.random.default_rng(2026),
     )
 
     assert np.all(np.isfinite(summary))
@@ -87,7 +87,6 @@ def test_ezdm_simulator_rejects_invalid_inputs(kwargs, message):
         "t0": 0.3,
         "n_trials": 50,
         "s": 0.1,
-        "rng": np.random.default_rng(2026),
     }
     params.update(kwargs)
 

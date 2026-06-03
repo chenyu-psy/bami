@@ -9,6 +9,7 @@ theme:
     accent: blue
   features:
     - navigation.sections
+    - navigation.indexes
     - navigation.tabs
     - navigation.tabs.sticky
     - navigation.instant
@@ -39,9 +40,16 @@ nav:
           - Inference:
               - Prior utilities: api/inference/priors-transforms.md
               - Saved workflows and runtime: api/inference/checkpoints-runtime.md
-  - Examples:
-      - Simple SDM workflow: examples/simple-sdm.md
-      - Hierarchical ezDM workflow: examples/hierarchical-ezdm.md
+  - Articles:
+      - articles/index.md
+      - Start here:
+          - Build and check a simple SDM workflow: articles/sdm-fixed-simple.md
+      - Core concepts:
+          - Write a simulator for your own model: articles/simulators.md
+          - Choose priors and links for model parameters: articles/priors.md
+      - Workflow design:
+          - Choose the right workflow structure: articles/advanced-workflows.md
+          - Fit a hierarchical ezDM workflow: examples/hierarchical-ezdm.md
 
 markdown_extensions:
   - admonition

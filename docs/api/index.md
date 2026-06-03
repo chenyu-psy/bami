@@ -12,8 +12,13 @@ Start here when building a BayesFlow workflow around a simulator.
 
 ## Simulators
 
-Use these functions to simulate cognitive-model summaries or trial rows for
-workflows. Model-specific helpers are documented on each simulator page.
+A simulator is a function that converts model parameters into simulated
+behavioral performance or observation rows for a workflow. The pages below
+document only the built-in simulators shipped with `bami`.
+
+You can also write your own simulator. See the
+[simulators article](../articles/simulators.md) for a step-by-step custom ezDM
+example.
 
 [`simulate_sdm_simple`](simulators/sdm-circular.md)
 : Simulate trial-level circular errors for a standard SDM workflow.

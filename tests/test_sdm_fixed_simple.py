@@ -2,7 +2,6 @@
 
 import numpy as np
 from fixtures_model_specs import SDM_SPEC
-from bami.inference import transform_hierarchical_samples
 from bami.simulators.sdm import (
     simulate_sdm_simple,
 )
@@ -79,7 +78,6 @@ def test_sdm_fixed_hierarchy_outputs_nested_continuous_errors():
         keep_subject_truth=["c", "kappa"],
         summary_dim=4,
         n_coupling_layers=2,
-        transform_samples=transform_hierarchical_samples,
     )
 
     sim = model.workflow.simulate(3)
@@ -106,7 +104,6 @@ def test_sdm_flex_hierarchy_pads_nested_continuous_errors():
         keep_subject_truth=["c", "kappa"],
         summary_dim=4,
         n_coupling_layers=2,
-        transform_samples=transform_hierarchical_samples,
     )
 
     sim = model.workflow.simulate(3)
@@ -136,7 +133,6 @@ def test_sdm_fixed_hierarchy_tiny_training_accepts_stage_metrics():
         n_trials=3,
         summary_dim=4,
         n_coupling_layers=2,
-        transform_samples=transform_hierarchical_samples,
     )
 
     history = model.train_workflow(
@@ -175,7 +171,6 @@ def test_sdm_trial_random_estimator_accepts_fixed_and_flex_trials(tmp_path):
             keep_subject_truth=["c", "kappa"],
             summary_dim=4,
             n_coupling_layers=2,
-            transform_samples=transform_hierarchical_samples,
             **trial_kwargs,
         )
         model.train_random_estimator(

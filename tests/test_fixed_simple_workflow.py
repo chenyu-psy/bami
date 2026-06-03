@@ -18,7 +18,7 @@ from bami.workflows.hierarchical import (
 from bami.workflows.simple import _suppress_singleton_softmax_warning
 
 
-def _toy_simulator(theta: float, n_trials: int, rng) -> np.ndarray:
+def _toy_simulator(theta: float, n_trials: int) -> np.ndarray:
     """Simulate one toy fixed-simple data row.
 
     Parameters
@@ -27,9 +27,6 @@ def _toy_simulator(theta: float, n_trials: int, rng) -> np.ndarray:
         Public toy parameter.
     n_trials
         Fixed trial count supplied by the workflow.
-    rng
-        NumPy-compatible random generator accepted by simulator contracts.
-
     Returns
     -------
     numpy.ndarray
@@ -39,7 +36,7 @@ def _toy_simulator(theta: float, n_trials: int, rng) -> np.ndarray:
     return np.array([theta, n_trials], dtype=np.float32)
 
 
-def _toy_summary_simulator(theta: float, n_trials: int, rng) -> np.ndarray:
+def _toy_summary_simulator(theta: float, n_trials: int) -> np.ndarray:
     """Simulate one aggregate row that does not contain trial count.
 
     Parameters
@@ -48,9 +45,6 @@ def _toy_summary_simulator(theta: float, n_trials: int, rng) -> np.ndarray:
         Public toy parameter.
     n_trials
         Trial count accepted for workflow compatibility.
-    rng
-        NumPy-compatible random generator accepted by simulator contracts.
-
     Returns
     -------
     numpy.ndarray
@@ -60,7 +54,7 @@ def _toy_summary_simulator(theta: float, n_trials: int, rng) -> np.ndarray:
     return np.array([theta], dtype=np.float32)
 
 
-def _toy_trial_simulator(theta: float, n_trials: int, rng) -> np.ndarray:
+def _toy_trial_simulator(theta: float, n_trials: int) -> np.ndarray:
     """Simulate one toy trial-data array.
 
     Parameters
@@ -69,16 +63,12 @@ def _toy_trial_simulator(theta: float, n_trials: int, rng) -> np.ndarray:
         Public toy parameter.
     n_trials
         Number of trial rows to return.
-    rng
-        NumPy-compatible random generator accepted by simulator contracts.
-
     Returns
     -------
     numpy.ndarray
         Trial rows with one feature per trial.
     """
 
-    del rng
     return np.full((n_trials, 1), theta, dtype=np.float32)
 
 
@@ -320,10 +310,10 @@ def test_simple_workflow_flex_trial_observation_adds_active_mask():
 def test_simple_workflow_trial_shape_error_mentions_observation():
     """Trial simulator shape errors should identify the selected contract."""
 
-    def bad_trial_simulator(theta: float, n_trials: int, rng) -> np.ndarray:
+    def bad_trial_simulator(theta: float, n_trials: int) -> np.ndarray:
         """Return an invalid aggregate-style row for a trial workflow."""
 
-        del theta, n_trials, rng
+        del theta, n_trials
         return np.array([1.0, 2.0], dtype=np.float32)
 
     model = SimpleWorkflow(

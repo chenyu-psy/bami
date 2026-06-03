@@ -72,7 +72,7 @@ class SimpleWorkflow:
         param_names: Public parameter names used by this workflow.
         priors: Prior specification passed to ``draw_prior_with_raw``.
         simulator: Function called as
-            ``simulator(**params, n_trials=..., rng=..., **simulator_kwargs)``.
+            ``simulator(**params, n_trials=..., **simulator_kwargs)``.
         observation: Use ``"aggregate"`` when the simulator returns one
             fixed-width summary row, or ``"trial"`` when it returns one row per
             trial.
@@ -95,8 +95,6 @@ class SimpleWorkflow:
         summary_dim: Width of the DeepSet summary network.
         n_coupling_layers: Number of coupling layers in the inference
             network.
-        transform_samples: Optional posterior transform function. If omitted,
-            raw samples are transformed with ``transform_simple_samples``.
         device: Workflow runtime device. CPU is the stable default; use
             ``"mps"`` or ``"cuda"`` only when accelerator training is desired.
     """
@@ -120,7 +118,6 @@ class SimpleWorkflow:
         input_format: InputFormat | None = None,
         summary_dim: int = 64,
         n_coupling_layers: int = 6,
-        transform_samples: Callable | None = None,
         device: str | None = "cpu",
     ):
         self.device = validate_device(device)
@@ -154,7 +151,6 @@ class SimpleWorkflow:
         self.workflow_family = f"{self.trial_design}_simple"
         self.summary_dim = int(summary_dim)
         self.n_coupling_layers = int(n_coupling_layers)
-        self._transform_samples = transform_samples
 
         with runtime_device(self.device):
             self._build_workflow()
@@ -357,7 +353,6 @@ class SimpleWorkflow:
             simulated = self._simulator_fn(
                 **public_params,
                 n_trials=n_trials,
-                rng=np.random,
                 **self.simulator_kwargs,
             )
             if self.observation == "aggregate":
@@ -611,8 +606,6 @@ class SimpleWorkflow:
             dict: Posterior samples with public-scale parameter keys added.
         """
 
-        if self._transform_samples is not None:
-            return self._transform_samples(samples, self.priors)
         from bami.inference.priors import transform_simple_samples
 
         return transform_simple_samples(samples, self.priors)

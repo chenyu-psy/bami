@@ -21,7 +21,7 @@ A typical workflow setup follows this order:
 
 1. Write `priors` for the parameters you want to infer.
 2. Choose or write a `simulator` that receives public parameter values,
-   `n_trials`, and `rng`.
+   and `n_trials`.
 3. Set `observation` to match the simulator output shape.
 4. Set trial counts with `n_trials` or `n_trials_range`.
 5. For hierarchical workflows, set subject counts with `n_subjects` or
@@ -56,10 +56,15 @@ The supported links are:
 | --- | --- | --- |
 | `identity` | The parameter can be any real value. | `raw` |
 | `log` | The parameter must be positive. | `exp(raw)` |
+| `softplus` | The parameter must be positive. | `log(1 + exp(raw))` |
 | `logit` | The parameter must be between 0 and 1. | inverse-logit of `raw` |
+| `probit` | The parameter must be between 0 and 1. | normal CDF of `raw` |
+| `cloglog` | The parameter must be between 0 and 1. | complementary log-log transform of `raw` |
 
 Distribution strings use a short function-like format, such as
-`"normal(0, 1)"`, `"logistic(0, 0.75)"`, or `"exponential(1)"`. Use
+`"normal(0, 1)"`, `"logistic(0, 0.75)"`, `"uniform(0, 1)"`, or
+`"exponential(1)"`. Supported distribution names are `normal`, `logistic`,
+`uniform`, `truncnorm`, `beta`, `gamma`, `exponential`, and `binomial`. Use
 distribution strings when the center or spread should vary across simulated
 datasets instead of staying fixed.
 
@@ -78,6 +83,10 @@ priors = {
 ```
 
 In this example, `a` is inferred and `s` is fixed.
+
+For a researcher-facing explanation of raw scale and links, see
+[Priors](../articles/priors.md). For simulator constants and observation
+contracts, see [Simulators](../articles/simulators.md).
 
 ## Simple example
 
@@ -111,7 +120,6 @@ Use `HierarchicalWorkflow` when one group draw should generate several
 subjects.
 
 ```python
-from bami.inference import transform_hierarchical_samples
 from bami.simulators import simulate_ezdm_simple
 from bami.workflows import HierarchicalWorkflow
 
@@ -129,7 +137,6 @@ model = HierarchicalWorkflow(
     obs_names=["pc", "mrt", "vrt"],
     n_subjects=3,
     n_trials=20,
-    transform_samples=transform_hierarchical_samples,
 )
 
 sim = model.simulate(4)

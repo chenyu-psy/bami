@@ -9,7 +9,7 @@ from bami.workflows import validate_observation, validate_workflow_contract
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _toy_simulator(theta, n_trials, rng):
+def _toy_simulator(theta, n_trials):
     """Return a tiny subject row for contract tests.
 
     Parameters
@@ -18,9 +18,6 @@ def _toy_simulator(theta, n_trials, rng):
         Public toy parameter.
     n_trials
         Number of simulated trials.
-    rng
-        Random generator accepted for API compatibility.
-
     Returns
     -------
     list[int]

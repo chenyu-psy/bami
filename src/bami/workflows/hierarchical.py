@@ -585,7 +585,7 @@ class HierarchicalWorkflow:
             ``link`` for stochastic parameters. Scalar entries are subject-level
             constants.
         simulator: Function called as
-            ``simulator(**params, n_trials=..., rng=..., **simulator_kwargs)``.
+            ``simulator(**params, n_trials=..., **simulator_kwargs)``.
         observation: Use ``"aggregate"`` when the simulator returns one
             fixed-width row per subject, or ``"trial"`` for one row per trial.
         simulator_kwargs: Constant keyword arguments passed to ``simulator``
@@ -615,7 +615,6 @@ class HierarchicalWorkflow:
         summary_dim: Width of the summary network.
         n_coupling_layers: Number of coupling layers in the inference
             network.
-        transform_samples: Optional posterior transform function.
         device: Workflow runtime device. CPU is the stable default; use
             ``"mps"`` or ``"cuda"`` only when accelerator training is desired.
     """
@@ -644,7 +643,6 @@ class HierarchicalWorkflow:
         input_format: InputFormat | None = None,
         summary_dim: int = 64,
         n_coupling_layers: int = 10,
-        transform_samples: Callable | None = None,
         device: str | None = "cpu",
     ):
         self.device = validate_device(device)
@@ -700,7 +698,6 @@ class HierarchicalWorkflow:
         self.subject_id_mode = "exchangeable"
         self.summary_dim = int(summary_dim)
         self.n_coupling_layers = int(n_coupling_layers)
-        self._transform_samples = transform_samples
 
         with runtime_device(self.device):
             self._build_workflow()
@@ -1066,7 +1063,6 @@ class HierarchicalWorkflow:
             row = self._simulator_fn(
                 **params,
                 n_trials=n_trials,
-                rng=np.random,
                 **self.simulator_kwargs,
             )
             row_arr = np.asarray(row, dtype=np.float32)
@@ -1155,7 +1151,6 @@ class HierarchicalWorkflow:
             rows = self._simulator_fn(
                 **params,
                 n_trials=n_trials,
-                rng=np.random,
                 **self.simulator_kwargs,
             )
             rows_arr = np.asarray(rows, dtype=np.float32)
@@ -1305,7 +1300,6 @@ class HierarchicalWorkflow:
         row = self._simulator_fn(
             **subject_params,
             n_trials=n_trials,
-            rng=np.random,
             **self.simulator_kwargs,
         )
         row_arr = np.asarray(row, dtype=np.float32)
@@ -1355,7 +1349,6 @@ class HierarchicalWorkflow:
         rows = self._simulator_fn(
             **subject_params,
             n_trials=n_trials,
-            rng=np.random,
             **self.simulator_kwargs,
         )
         rows_arr = np.asarray(rows, dtype=np.float32)
@@ -1537,19 +1530,20 @@ class HierarchicalWorkflow:
         )
 
     def convert_posterior(self, samples: dict) -> dict:
-        """Transform posterior samples when a transform function is supplied.
+        """Add public-scale hierarchical parameter samples.
 
         Args:
             samples: Raw posterior sample dictionary from BayesFlow.
 
         Returns:
-            dict: Transformed posterior samples, or the original samples when
-                no transform was supplied.
+            dict: Posterior samples with public group keys such as
+                ``theta_mu`` and ``theta_sigma`` added when raw keys are
+                present.
         """
 
-        if self._transform_samples is None:
-            return samples
-        return self._transform_samples(samples, self.priors)
+        from bami.inference.priors import transform_hierarchical_samples
+
+        return transform_hierarchical_samples(samples, self.priors)
 
     def convert_random_posterior(self, samples: dict) -> dict:
         """Return random-workflow samples without changing the ``z`` scale.

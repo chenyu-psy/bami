@@ -100,7 +100,6 @@ def test_ezdm_workflow_simulator_expansion_matches_preset_summary():
     from_workflow = model._simulator_fn(
         **params,
         n_trials=50,
-        rng=np.random,
         **model.simulator_kwargs,
     )
 
@@ -109,7 +108,6 @@ def test_ezdm_workflow_simulator_expansion_matches_preset_summary():
         **params,
         n_trials=50,
         s=EZDM_SPEC["scaling"],
-        rng=np.random,
     )
 
     assert from_workflow.shape == (3,)

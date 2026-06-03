@@ -63,8 +63,9 @@ def _bad_nan_activation(alpha, beta, mix):
 
 
 def test_m3_custom_simulator_returns_reproducible_counts():
-    """Custom M3 count simulation should be reproducible with an explicit rng."""
+    """Custom M3 count simulation should be reproducible with a global seed."""
 
+    np.random.seed(2026)
     first = simulate_m3_custom(
         alpha=0.8,
         beta=0.6,
@@ -72,8 +73,8 @@ def test_m3_custom_simulator_returns_reproducible_counts():
         n_trials=50,
         activation_fn=_custom_activation,
         n_options=[1, 2, 1],
-        rng=np.random.default_rng(2026),
     )
+    np.random.seed(2026)
     second = simulate_m3_custom(
         alpha=0.8,
         beta=0.6,
@@ -81,7 +82,6 @@ def test_m3_custom_simulator_returns_reproducible_counts():
         n_trials=50,
         activation_fn=_custom_activation,
         n_options=[1, 2, 1],
-        rng=np.random.default_rng(2026),
     )
 
     assert np.array_equal(first, second)
@@ -94,6 +94,7 @@ def test_m3_custom_simulator_returns_reproducible_counts():
 def test_m3_custom_simulator_uses_custom_activation_width():
     """Custom M3 simulation should follow the activation function width."""
 
+    np.random.seed(2026)
     out = simulate_m3_custom(
         alpha=0.8,
         beta=0.6,
@@ -101,7 +102,6 @@ def test_m3_custom_simulator_uses_custom_activation_width():
         n_trials=40,
         activation_fn=_custom_activation,
         n_options=[1, 2, 1],
-        rng=np.random.default_rng(2026),
     )
 
     assert out.shape == (3,)
@@ -136,7 +136,6 @@ def test_m3_custom_simulator_rejects_invalid_inputs(kwargs, message):
         "mix": 0.4,
         "n_trials": 40,
         "n_options": [1, 2, 1],
-        "rng": np.random.default_rng(2026),
     }
     params.update(kwargs)
 
@@ -172,7 +171,6 @@ def test_m3_custom_luce_rejects_negative_strengths():
             activation_fn=negative_activation,
             n_options=[1, 2, 1],
             rule="luce",
-            rng=np.random.default_rng(2026),
         )
 
 
@@ -194,17 +192,17 @@ def test_prop_m3_rejects_invalid_trial_count():
 def test_sdm_error_simulator_returns_trial_level_errors():
     """SDM error simulation should return reproducible continuous trial rows."""
 
+    np.random.seed(2026)
     first = simulate_sdm_simple(
         c=3.0,
         kappa=4.0,
         n_trials=40,
-        rng=np.random.default_rng(2026),
     )
+    np.random.seed(2026)
     second = simulate_sdm_simple(
         c=3.0,
         kappa=4.0,
         n_trials=40,
-        rng=np.random.default_rng(2026),
     )
 
     assert np.array_equal(first, second)
@@ -226,19 +224,19 @@ def test_sdm_error_simulator_rejects_invalid_parameters():
 def test_ezdm_simulator_returns_reproducible_summary():
     """ezDM summary simulation should return pc, mrt, and vrt."""
 
+    np.random.seed(2026)
     first = simulate_ezdm_simple(
         v=0.1,
         a=0.14,
         t0=0.3,
         n_trials=50,
-        rng=np.random.default_rng(2026),
     )
+    np.random.seed(2026)
     second = simulate_ezdm_simple(
         v=0.1,
         a=0.14,
         t0=0.3,
         n_trials=50,
-        rng=np.random.default_rng(2026),
     )
 
     assert np.array_equal(first, second)

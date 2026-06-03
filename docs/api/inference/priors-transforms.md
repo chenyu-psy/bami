@@ -5,6 +5,9 @@ Most users pass prior dictionaries to `SimpleWorkflow` or
 posterior transforms. Use these utilities only when checking prior draws or
 writing custom workflow code.
 
+For a practical introduction to prior dictionaries, distribution strings, and
+link functions, see [Priors](../../articles/priors.md).
+
 ## Prior utilities
 
 ::: bami.inference.priors

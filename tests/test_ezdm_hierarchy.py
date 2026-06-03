@@ -6,7 +6,6 @@ from fixtures_model_specs import EZDM_SPEC
 from bami.inputs import aggregate_summary
 from bami.inference.priors import (
     mu_raw_key,
-    transform_hierarchical_samples,
 )
 from bami.simulators.ezdm import simulate_ezdm_simple
 from bami.workflows import HierarchicalWorkflow
@@ -36,7 +35,6 @@ def _build_ezdm_hierarchy(**design_kwargs) -> HierarchicalWorkflow:
         data_width=len(EZDM_SPEC["summary_contract"]["order"]),
         summary_dim=4,
         n_coupling_layers=2,
-        transform_samples=transform_hierarchical_samples,
         **design_kwargs,
     )
 
