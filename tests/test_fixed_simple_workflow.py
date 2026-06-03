@@ -645,7 +645,8 @@ def test_masked_nested_summary_is_subject_permutation_invariant():
     first = _to_numpy(network(data, training=False))
     second = _to_numpy(network(permuted, training=False))
 
-    assert np.allclose(first, second, atol=1e-6)
+    # CPU backends can differ slightly when pooling float32 subject summaries.
+    assert np.allclose(first, second, atol=2e-6)
 
 
 def test_masked_set_encoder_count_features_track_active_count():
