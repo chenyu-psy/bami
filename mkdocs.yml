@@ -28,9 +28,8 @@ nav:
           - SDM: api/simulators/sdm-circular.md
           - ezDM: api/simulators/ezdm.md
           - M3: api/simulators/m3.md
-      - Parameters:
-          - Population and individual parameters: api/parameters.md
-      - Utilities: api/utils.md
+      - Utils:
+          - Utility helpers: api/utils.md
       - Evaluation:
           - Metrics: api/evaluation/metrics.md
           - Diagnostics: api/evaluation/diagnostics.md
