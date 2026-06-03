@@ -17,7 +17,6 @@ def simulate_ezdm_simple(
     t0: float,
     n_trials: int = 100,
     s: float = 0.1,
-    rng=None,
 ) -> np.ndarray:
     """Simulate one ezDM aggregate summary row for bami workflows.
 
@@ -32,8 +31,6 @@ def simulate_ezdm_simple(
         t0: Non-decision time. Must be positive.
         n_trials: Number of trials used to sample observed accuracy.
         s: Diffusion scaling parameter from Wagenmakers et al. (2007).
-        rng (numpy.random.Generator | None): Optional NumPy random generator. Defaults to ``np.random`` so
-            existing project-level seeding remains effective.
 
     Returns:
         numpy.ndarray: Summary vector ``[pc, mrt, vrt]``.
@@ -44,7 +41,6 @@ def simulate_ezdm_simple(
     t0 = _check_positive(t0, "t0")
     n_trials = _check_n_trials(n_trials)
     s = _check_positive(s, "s")
-    rng = np.random if rng is None else rng
 
     if v == 0:
         raise ValueError("v must not equal 0 for the EZ equations.")
@@ -62,7 +58,7 @@ def simulate_ezdm_simple(
     numerator = logit_pc * (logit_pc * pc_true**2 - logit_pc * pc_true + pc_true - 0.5)
     vrt = numerator / ((abs(v) / s) ** 4)
 
-    n_correct = rng.binomial(n_trials, pc_true)
+    n_correct = np.random.binomial(n_trials, pc_true)
     pc = _edge_correct_pc(n_correct, n_trials)
     return np.array([pc, mrt, vrt], dtype=np.float32)
 

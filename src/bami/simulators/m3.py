@@ -18,7 +18,6 @@ def simulate_m3_custom(
     activation_fn,
     n_options: int | Sequence[int],
     rule: str = "softmax",
-    rng=None,
     **parms,
 ) -> np.ndarray:
     """Simulate response counts from a user-defined M3 activation function.
@@ -30,8 +29,6 @@ def simulate_m3_custom(
         n_options: Number of response options represented by each activation
             category.
         rule: Choice rule used to convert activations to probabilities.
-        rng (numpy.random.Generator | None): Optional NumPy random generator. Defaults to ``np.random`` so
-            existing project-level seeding remains effective.
         **parms (Any): Public-scale model parameters passed to ``activation_fn``.
 
     Returns:
@@ -45,14 +42,13 @@ def simulate_m3_custom(
     if not callable(activation_fn):
         raise ValueError("activation_fn must be callable.")
 
-    rng = np.random if rng is None else rng
     activations = activation_fn(**parms)
     probs = _choice_probs(
         activations,
         n_options=n_options,
         rule=rule,
     )
-    return rng.multinomial(n_trials, probs).astype(np.int64)
+    return np.random.multinomial(n_trials, probs).astype(np.int64)
 
 
 def prop_m3(row, n_trials: int, model=None) -> np.ndarray:

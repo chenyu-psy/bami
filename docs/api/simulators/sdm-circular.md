@@ -19,8 +19,6 @@ contains one error in `[-pi, pi]`.
 ## Example
 
 ```python
-import numpy as np
-
 from bami.simulators import simulate_sdm_simple
 
 
@@ -28,6 +26,5 @@ errors = simulate_sdm_simple(
     c=1.0,
     kappa=1.2,
     n_trials=25,
-    rng=np.random.default_rng(2026),
 )
 ```

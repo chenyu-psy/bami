@@ -6,7 +6,6 @@ from fixtures_model_specs import EZDM_SPEC
 from bami.inputs import aggregate_summary
 from bami.inference.priors import (
     mu_raw_key,
-    transform_hierarchical_samples,
 )
 from bami.simulators.ezdm import simulate_ezdm_simple
 from bami.workflows import HierarchicalWorkflow
@@ -33,10 +32,9 @@ def _build_ezdm_hierarchy(**design_kwargs) -> HierarchicalWorkflow:
         simulator=simulate_ezdm_simple,
         observation="aggregate",
         simulator_kwargs={"s": EZDM_SPEC["scaling"]},
-        data_width=len(EZDM_SPEC["summary_contract"]["order"]),
+        obs_names=EZDM_SPEC["summary_contract"]["order"],
         summary_dim=4,
         n_coupling_layers=2,
-        transform_samples=transform_hierarchical_samples,
         **design_kwargs,
     )
 
@@ -59,8 +57,8 @@ def test_ezdm_flex_hierarchy_uses_input_format_n_feature_and_mask():
 
     np.random.seed(2026)
     model = _build_ezdm_hierarchy(
-        n_subjects_range=(2, 5),
-        n_trials_range=(10, 15),
+        n_subjects=(2, 5),
+        n_trials=(10, 15),
         input_format=aggregate_summary(n_range=(10, 14)),
     )
     sim = model.workflow.simulate(6)

@@ -5,7 +5,7 @@ functions and prior settings from outside this package so the workflow layer can
 remain reusable.
 """
 
-from .contracts import validate_observation, validate_workflow_contract
+from .contracts import validate_observation
 from .hierarchical import HierarchicalWorkflow
 from .simple import SimpleWorkflow
 
@@ -13,5 +13,4 @@ __all__ = [
     "HierarchicalWorkflow",
     "SimpleWorkflow",
     "validate_observation",
-    "validate_workflow_contract",
 ]

@@ -19,7 +19,7 @@ import bayesflow as bf
 from bami.inputs import InputFormat
 from bami.inference.runtime import runtime_device, validate_device
 from bami.workflows import training
-from bami.workflows.contracts import validate_observation, validate_workflow_contract
+from bami.workflows.contracts import validate_observation
 
 _SINGLETON_SOFTMAX_MESSAGE = (
     r"You are using a softmax over axis .* of a tensor of shape .*"
@@ -72,31 +72,22 @@ class SimpleWorkflow:
         param_names: Public parameter names used by this workflow.
         priors: Prior specification passed to ``draw_prior_with_raw``.
         simulator: Function called as
-            ``simulator(**params, n_trials=..., rng=..., **simulator_kwargs)``.
+            ``simulator(**params, n_trials=..., **simulator_kwargs)``.
         observation: Use ``"aggregate"`` when the simulator returns one
             fixed-width summary row, or ``"trial"`` when it returns one row per
             trial.
         simulator_kwargs: Constant keyword arguments passed to ``simulator``
             on every simulation.
-        data_width: Number of features returned by ``simulator``. For new
-            code, prefer ``obs_names`` so column meanings are visible.
-        obs_names: Names of simulator output columns. When supplied,
-            ``data_width`` is inferred from ``len(obs_names)``.
-        contract: Optional compatibility mapping with ``name``,
-            ``param_names``, ``priors``, ``simulator``, and ``data_width``.
-        n_trials: Fixed number of trials passed to the simulator. Provide
-            this or ``n_trials_range``, but not both.
-        n_trials_range: Range ``(low, high)``. Trial counts are drawn from
-            ``[low, high)`` for each simulated dataset.
-        include_trial_feature: Whether to append the simulated trial count to
-            each data row.
+        obs_names: Names of simulator output columns. The workflow infers the
+            simulator row width from ``len(obs_names)``.
+        n_trials: Fixed number of trials passed to the simulator, or a
+            two-value range ``(low, high)``. Range values draw trial counts
+            from ``[low, high)`` for each simulated dataset.
         input_format: Optional helper that formats simulator rows and trial
-            counts instead of ``include_trial_feature``.
+            counts, for example by appending an encoded trial-count feature.
         summary_dim: Width of the DeepSet summary network.
         n_coupling_layers: Number of coupling layers in the inference
             network.
-        transform_samples: Optional posterior transform function. If omitted,
-            raw samples are transformed with ``transform_simple_samples``.
         device: Workflow runtime device. CPU is the stable default; use
             ``"mps"`` or ``"cuda"`` only when accelerator training is desired.
     """
@@ -111,133 +102,109 @@ class SimpleWorkflow:
         simulator: Callable | None = None,
         observation: str | None = None,
         simulator_kwargs: Mapping | None = None,
-        data_width: int | None = None,
         obs_names: Sequence[str] | None = None,
-        contract: Mapping | None = None,
-        n_trials: int | None = 100,
-        n_trials_range: Sequence[int] | None = None,
-        include_trial_feature: bool = False,
+        n_trials: int | Sequence[int] = 100,
         input_format: InputFormat | None = None,
         summary_dim: int = 64,
         n_coupling_layers: int = 6,
-        transform_samples: Callable | None = None,
         device: str | None = "cpu",
     ):
         self.device = validate_device(device)
-        self.contract = self._resolve_contract(
-            name=name,
-            param_names=param_names,
-            priors=priors,
-            simulator=simulator,
-            data_width=data_width,
-            obs_names=obs_names,
-            contract=contract,
-        )
-        self.model_name = self.contract["name"]
-        self.param_names = self.contract["param_names"]
-        self.priors = self.contract["priors"]
-        self._simulator_fn = self.contract["simulator"]
+        self.model_name = self._check_required(name, "name")
+        self.param_names = self._check_param_names(param_names)
+        self.priors = self._check_required(priors, "priors")
+        self._simulator_fn = self._check_callable(simulator, "simulator")
         self.observation = validate_observation(observation, "SimpleWorkflow")
-        self.simulator_kwargs = dict(
-            simulator_kwargs or self.contract.get("simulator_kwargs", {})
-        )
-        self.obs_names = self.contract["obs_names"]
-        self.data_width = self.contract["data_width"]
+        self.simulator_kwargs = dict(simulator_kwargs or {})
+        self.obs_names = self._resolve_obs_names(obs_names)
+        self.data_width = len(self.obs_names)
         self.trial_design, self.n_trials, self.n_trials_range = self._resolve_trials(
-            n_trials=n_trials,
-            n_trials_range=n_trials_range,
+            n_trials
         )
-        self.include_trial_feature = bool(include_trial_feature)
         self.input_format = self._check_input_format(input_format)
         self.max_trials = self._resolve_max_trials()
         self.include_mask = self.observation == "trial" and self.trial_design == "flex"
         self.workflow_family = f"{self.trial_design}_simple"
         self.summary_dim = int(summary_dim)
         self.n_coupling_layers = int(n_coupling_layers)
-        self._transform_samples = transform_samples
 
         with runtime_device(self.device):
             self._build_workflow()
         self.validation_data = None
 
     @staticmethod
-    def _resolve_contract(
-        name: str | None,
-        param_names: list[str] | None,
-        priors: Mapping | None,
-        simulator: Callable | None,
-        data_width: int | None,
-        obs_names: Sequence[str] | None,
-        contract: Mapping | None,
-    ) -> dict:
-        """Return a validated workflow contract.
+    def _check_required(value, name: str):
+        """Return a required constructor value.
 
         Args:
-            name: Optional workflow name from simulator-first setup.
-            param_names: Optional public parameter names.
-            priors: Optional prior specification.
-            simulator: Optional simulator callable.
-            data_width: Optional simulator output width.
-            obs_names: Optional simulator output column names.
-            contract: Optional legacy contract mapping. It is accepted so existing model
-                code can migrate one workflow at a time.
+            value: Candidate value.
+            name: Parameter name used in the error message.
 
         Returns:
-            dict: Validated workflow contract used internally by BayesFlow setup.
+            object: The supplied value when it is not ``None``.
         """
 
-        if contract is not None:
-            out = validate_workflow_contract(contract)
-            out["obs_names"] = list(
-                contract.get("obs_names", [f"x{i}" for i in range(out["data_width"])])
-            )
-            return out
+        if value is None:
+            raise ValueError(f"SimpleWorkflow requires {name}.")
+        return value
 
-        checked_obs_names = SimpleWorkflow._resolve_obs_names(obs_names, data_width)
-        explicit_contract = {
-            "name": name,
-            "param_names": param_names,
-            "priors": priors,
-            "simulator": simulator,
-            "data_width": len(checked_obs_names) if checked_obs_names else data_width,
-        }
-        missing = [key for key, value in explicit_contract.items() if value is None]
-        if missing:
-            raise ValueError(
-                "SimpleWorkflow requires explicit simulator settings: " f"{missing}"
-            )
-        out = validate_workflow_contract(explicit_contract)
-        out["obs_names"] = checked_obs_names or [
-            f"x{i}" for i in range(out["data_width"])
-        ]
-        return out
+    @staticmethod
+    def _check_param_names(param_names: Sequence[str] | None) -> list[str]:
+        """Return validated public parameter names.
+
+        Args:
+            param_names: Names inferred by the workflow.
+
+        Returns:
+            list[str]: Non-empty unique parameter names.
+        """
+
+        if param_names is None:
+            raise ValueError("SimpleWorkflow requires param_names.")
+        names = list(param_names)
+        if not names or any(not isinstance(name, str) or not name for name in names):
+            raise ValueError("param_names must contain non-empty strings.")
+        if len(set(names)) != len(names):
+            raise ValueError("param_names must be unique.")
+        return names
+
+    @staticmethod
+    def _check_callable(value, name: str) -> Callable:
+        """Return a required callable constructor value.
+
+        Args:
+            value: Candidate callable.
+            name: Parameter name used in the error message.
+
+        Returns:
+            Callable: The supplied callable.
+        """
+
+        if not callable(value):
+            raise ValueError(f"{name} must be callable.")
+        return value
 
     @staticmethod
     def _resolve_obs_names(
         obs_names: Sequence[str] | None,
-        data_width: int | None,
-    ) -> list[str] | None:
-        """Return validated observation names or ``None``.
+    ) -> list[str]:
+        """Return validated observation names.
 
         Args:
             obs_names:
-                Optional simulator-output column names.
-            data_width:
-                Optional expected simulator-output width.
+                Simulator-output column names.
 
         Returns:
-            list[str] or None: Validated observation names when supplied.
+            list[str]: Validated observation names.
         """
 
         if obs_names is None:
-            return None
+            raise ValueError("obs_names is required.")
         names = list(obs_names)
         if not names or any(not isinstance(name, str) or not name for name in names):
             raise ValueError("obs_names must contain non-empty strings.")
         if len(set(names)) != len(names):
             raise ValueError("obs_names must be unique.")
-        if data_width is not None and int(data_width) != len(names):
-            raise ValueError("data_width must match len(obs_names).")
         return names
 
     @staticmethod
@@ -267,29 +234,48 @@ class SimpleWorkflow:
     @classmethod
     def _resolve_trials(
         cls,
-        n_trials: int | None,
-        n_trials_range: Sequence[int] | None,
+        n_trials: int | Sequence[int],
     ) -> tuple[str, int | None, tuple[int, int] | None]:
-        """Validate fixed or flexible trial-count settings.
+        """Validate fixed or flexible trial-count settings from ``n_trials``.
 
         Args:
             n_trials:
-                Fixed trial count, or ``None`` when using a range.
-            n_trials_range:
-                Two-value range with lower and exclusive upper bounds, or ``None``
-                when using a fixed trial count.
+                Positive fixed trial count, or a two-value range with lower
+                and exclusive upper bounds.
 
         Returns:
             tuple[str, int | None, tuple[int, int] | None]: Trial design label and validated trial settings.
         """
 
-        if n_trials is not None and n_trials_range is not None:
-            raise ValueError("Provide either n_trials or n_trials_range, not both.")
-        if n_trials is None and n_trials_range is None:
-            raise ValueError("Provide one of n_trials or n_trials_range.")
-        if n_trials_range is not None:
-            return "flex", None, cls._check_range(n_trials_range, "n_trials_range")
-        return "fixed", cls._check_positive_int(n_trials, "n_trials"), None
+        return cls._resolve_count(n_trials, "n_trials")
+
+    @classmethod
+    def _resolve_count(
+        cls,
+        value: int | Sequence[int],
+        name: str,
+    ) -> tuple[str, int | None, tuple[int, int] | None]:
+        """Validate one fixed or flexible positive count setting.
+
+        Args:
+            value:
+                Positive fixed count, or a two-value range with lower and
+                exclusive upper bounds.
+            name:
+                Setting name used in error messages.
+
+        Returns:
+            tuple[str, int | None, tuple[int, int] | None]: Design label and validated count settings.
+        """
+
+        if value is None:
+            raise ValueError(
+                f"{name} must be a positive integer or a two-value range "
+                "(low, high)."
+            )
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+            return "flex", None, cls._check_range(value, name)
+        return "fixed", cls._check_positive_int(value, name), None
 
     def _draw_n_trials(self, rng=np.random) -> int:
         """Draw the trial count for one simulated dataset.
@@ -357,14 +343,19 @@ class SimpleWorkflow:
             simulated = self._simulator_fn(
                 **public_params,
                 n_trials=n_trials,
-                rng=np.random,
                 **self.simulator_kwargs,
             )
             if self.observation == "aggregate":
+                raw_row = np.asarray(simulated, dtype=np.float32)
                 data = self._as_aggregate_data(simulated, n_trials)
             else:
+                raw_row = None
                 data = self._as_trial_data(simulated, n_trials)
-            return {"data": data}
+            out = {"data": data}
+            raw_key = self._raw_output_key()
+            if raw_key is not None and raw_row is not None:
+                out[raw_key] = raw_row
+            return out
 
         from bami.inference.priors import raw_key
 
@@ -393,7 +384,6 @@ class SimpleWorkflow:
         self.workflow.trial_design = self.trial_design
         self.workflow.model_name = self.model_name
         self.workflow.observation = self.observation
-        self.workflow.include_trial_feature = self.include_trial_feature
         self.workflow.include_mask = self.include_mask
         self.workflow.input_format = self.input_format
         self.workflow.input_format_metadata = self._input_format_metadata()
@@ -410,8 +400,6 @@ class SimpleWorkflow:
             return self.input_format.output_width(self.data_width)
 
         width = self.data_width
-        if self.observation == "aggregate" and self.include_trial_feature:
-            width += 1
         if self.observation == "trial" and self.include_mask:
             width += 1
         return width
@@ -425,7 +413,11 @@ class SimpleWorkflow:
         """
 
         names = list(self.obs_names)
-        if self.observation == "aggregate" and self.include_trial_feature:
+        if (
+            self.observation == "aggregate"
+            and self.input_format is not None
+            and self.input_format.add_n
+        ):
             names.append("n_trials")
         if self.observation == "trial" and self.include_mask:
             names.append("active_trial")
@@ -462,21 +454,17 @@ class SimpleWorkflow:
             return None
         return self.input_format.to_dict()
 
-    def _append_trial_feature(self, row, n_trials: int) -> np.ndarray:
-        """Append the trial count to one simulator row.
-
-        Args:
-            row:
-                Simulator output before workflow-level design features.
-            n_trials:
-                Trial count used for this simulated dataset.
+    def _raw_output_key(self) -> str | None:
+        """Return the optional key for preserving raw aggregate rows.
 
         Returns:
-            numpy.ndarray: One row with the trial-count feature appended.
+            str or None: Output key from ``input_format.keep_raw_as`` when the
+            configured input format requests raw diagnostic rows.
         """
 
-        row_arr = np.asarray(row, dtype=np.float32).reshape(-1)
-        return np.concatenate([row_arr, np.array([n_trials], dtype=np.float32)])
+        if self.input_format is None:
+            return None
+        return self.input_format.keep_raw_as
 
     def _as_data_row(self, row) -> np.ndarray:
         """Convert simulator output to BayesFlow simple data shape.
@@ -516,8 +504,6 @@ class SimpleWorkflow:
 
         if self.input_format is not None:
             row = self.input_format.encode(row, n_trials)
-        elif self.include_trial_feature:
-            row = self._append_trial_feature(row, n_trials)
         return self._as_data_row(row)
 
     def _as_trial_data(self, rows, n_trials: int) -> np.ndarray:
@@ -555,8 +541,8 @@ class SimpleWorkflow:
 
         Args:
             counts:
-                Array ending in ``data_width`` count features. A final trial-count
-                feature is appended when ``include_trial_feature`` is enabled.
+                Array ending in the base count features. When ``input_format``
+                encodes trial count, the final column must contain ``n_trials``.
 
         Returns:
             tuple[numpy.ndarray, list]: Batched data array and row identifiers.
@@ -569,13 +555,17 @@ class SimpleWorkflow:
         arr = np.asarray(counts, dtype=np.float32)
         row_ids = list(range(arr.shape[0])) if arr.ndim >= 2 else [0]
         if self.input_format is not None and self.input_format.add_n:
-            if arr.shape[-1] != self.data_width + 1:
+            can_infer_n = self.input_format.kind in {"counts", "counts_as_proportions"}
+            if arr.shape[-1] == self.data_width + 1:
+                n_trials = arr[..., -1]
+                arr = arr[..., : self.data_width]
+            elif can_infer_n and arr.shape[-1] == self.data_width:
+                n_trials = arr.sum(axis=-1)
+            else:
                 raise ValueError(
                     "counts must include base features plus n_trials when "
                     "input_format encodes n."
                 )
-            n_trials = arr[..., -1]
-            arr = arr[..., : self.data_width]
         else:
             if arr.shape[-1] != self.data_width:
                 raise ValueError(f"counts must end with {self.data_width} features.")
@@ -594,9 +584,6 @@ class SimpleWorkflow:
                 *arr.shape[:-1],
                 self._feature_width(),
             )
-        elif self.include_trial_feature:
-            totals = arr.sum(axis=-1, keepdims=True)
-            arr = np.concatenate([arr, totals], axis=-1)
         if arr.ndim == 2:
             arr = arr[np.newaxis, :, :]
         return arr.astype(np.float32), row_ids
@@ -611,8 +598,6 @@ class SimpleWorkflow:
             dict: Posterior samples with public-scale parameter keys added.
         """
 
-        if self._transform_samples is not None:
-            return self._transform_samples(samples, self.priors)
         from bami.inference.priors import transform_simple_samples
 
         return transform_simple_samples(samples, self.priors)
@@ -857,11 +842,15 @@ class SimpleWorkflow:
         try:
             if len(value) != 2:
                 raise ValueError(f"{name} must have exactly two values.")
-            low = cls._check_positive_int(value[0], f"{name}[0]")
+            low = int(value[0])
             high = int(value[1])
         except TypeError as exc:
             raise ValueError(f"{name} must be a two-value sequence.") from exc
+        except ValueError as exc:
+            if str(exc).startswith(f"{name} must"):
+                raise
+            raise ValueError(f"{name} must contain integer values.") from exc
 
-        if high <= low:
+        if low < 1 or high <= low:
             raise ValueError(f"{name} must satisfy 1 <= low < high.")
         return low, high

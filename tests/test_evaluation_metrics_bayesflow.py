@@ -525,7 +525,6 @@ def test_hierarchical_workflow_plot_random_recovery_ignores_padded_truth():
     """Random recovery should plot one dataset-level metric per parameter."""
 
     model = HierarchicalWorkflow.__new__(HierarchicalWorkflow)
-    model.keep_subject_truth = ["theta"]
     simulated = {
         "theta_subj": np.array([[0.1, 0.2, np.nan], [0.3, 0.4, np.nan]]),
         "data": np.zeros((2, 3, 1)),
@@ -576,7 +575,6 @@ def test_hierarchical_workflow_plot_random_recovery_uses_memory_safe_batches():
     """Random recovery should process datasets in bounded chunks."""
 
     model = HierarchicalWorkflow.__new__(HierarchicalWorkflow)
-    model.keep_subject_truth = ["theta"]
     simulate_calls = []
 
     def fake_simulate(n_datasets):
@@ -649,7 +647,6 @@ def test_hierarchical_workflow_plot_random_recovery_forwards_group_sample_batch_
     """Random recovery should forward batch size to group posterior sampling."""
 
     model = HierarchicalWorkflow.__new__(HierarchicalWorkflow)
-    model.keep_subject_truth = ["theta"]
     model.simulate = lambda n_datasets: {
         "theta_subj": np.array([[0.1, 0.2]]),
         "data": np.zeros((1, 2, 1)),
@@ -687,7 +684,6 @@ def test_evaluation_diagnostics_plot_random_recovery_direct_call():
     """Random recovery should facet when multiple metrics are requested."""
 
     model = HierarchicalWorkflow.__new__(HierarchicalWorkflow)
-    model.keep_subject_truth = ["theta"]
     simulated = {
         "theta_subj": np.array([[0.1, 0.2], [0.3, 0.4]]),
         "data": np.zeros((2, 2, 1)),
@@ -720,7 +716,6 @@ def test_hierarchical_workflow_plot_random_recovery_hides_internal_output(capsys
     """Random recovery should hide internal BayesFlow-style sampling chatter."""
 
     model = HierarchicalWorkflow.__new__(HierarchicalWorkflow)
-    model.keep_subject_truth = ["theta"]
     model.simulate = lambda n_datasets: {
         "theta_subj": np.array([[0.1, 0.2]]),
         "data": np.zeros((1, 2, 1)),
@@ -758,7 +753,6 @@ def test_hierarchical_workflow_plot_random_recovery_rejects_bad_metrics():
     """Random recovery should reject empty or unsupported metric requests."""
 
     model = HierarchicalWorkflow.__new__(HierarchicalWorkflow)
-    model.keep_subject_truth = ["theta"]
     model.simulate = lambda n_datasets: {
         "theta_subj": np.array([[0.1, 0.2]]),
         "data": np.zeros((1, 2, 1)),
@@ -779,17 +773,16 @@ def test_hierarchical_workflow_plot_random_recovery_rejects_bad_metrics():
 
 
 def test_hierarchical_workflow_plot_random_recovery_requires_subject_truth():
-    """Random recovery needs saved subject truth from keep_subject_truth."""
+    """Random recovery needs simulated subject truth arrays."""
 
     model = HierarchicalWorkflow.__new__(HierarchicalWorkflow)
-    model.keep_subject_truth = []
     model.simulate = lambda n_datasets: {"data": np.zeros((1, 1, 1))}
     model.sample_group_posterior = lambda **kwargs: {"theta_mu_raw": np.zeros((1, 1))}
     model.estimate_random_parameter = lambda **kwargs: pd.DataFrame(
         {"dataset_id": [0], "subject_id": [0], "theta": [0.0]}
     )
 
-    with pytest.raises(ValueError, match="keep_subject_truth"):
+    with pytest.raises(ValueError, match="<param>_subj"):
         model.plot_random_recovery(n_datasets=1, num_samples=1, show_progress=False)
 
 
@@ -901,7 +894,6 @@ def test_sample_random_posterior_uses_paired_group_draws():
     model.priors = {"theta": {"mean": 0.0, "sd": 1.0, "link": "log"}}
     model.observation = "aggregate"
     model.input_format = None
-    model.include_trial_feature = False
     model.include_mask = False
     model.data_width = 1
     model.random_workflow = DummyRandomWorkflow()
@@ -937,7 +929,6 @@ def test_sample_random_posterior_uses_fixed_group_components():
     model.priors = {"theta": {"mean": "normal(0, 1)", "sd": 2.0, "link": "identity"}}
     model.observation = "aggregate"
     model.input_format = None
-    model.include_trial_feature = False
     model.include_mask = False
     model.data_width = 1
     model.random_workflow = DummyRandomWorkflow()
@@ -977,7 +968,6 @@ def _build_trial_random_model(*, trial_design: str = "fixed") -> HierarchicalWor
     model.priors = {"theta": {"mean": 0.0, "sd": 1.0, "link": "identity"}}
     model.observation = "trial"
     model.input_format = None
-    model.include_trial_feature = False
     model.include_mask = False
     model.data_width = 1
     model.random_workflow = DummyRandomWorkflow()

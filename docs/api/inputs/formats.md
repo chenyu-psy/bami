@@ -15,19 +15,24 @@ need to carry trial-count information.
         - aggregate_summary
         - proportions
         - counts
+        - counts_as_proportions
 
 ## Examples
 
 ```python
-from bami.inputs import aggregate_summary, counts, proportions
+from bami.inputs import aggregate_summary, counts, counts_as_proportions, proportions
 
 
 summary_format = aggregate_summary(n_range=(10, 100))
 encoded = summary_format.encode([0.72, 0.41, 0.08], n_trials=40)
-print(summary_format.output_width(data_width=3))
+print(summary_format.output_width(3))
 print(summary_format.transform_n(40))
 print(summary_format.to_dict())
 
 prop_format = proportions(n_range=(20, 200))
 count_format = counts(add_n=True, n_range=(20, 200))
+count_prop_format = counts_as_proportions(
+    n_range=(20, 200),
+    keep_raw_as="raw_counts",
+)
 ```

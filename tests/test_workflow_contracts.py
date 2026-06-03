@@ -1,73 +1,12 @@
-"""Tests for model-agnostic workflow contract validation."""
+"""Tests for model-agnostic workflow observation validation."""
 
 from pathlib import Path
 
 import pytest
 
-from bami.workflows import validate_observation, validate_workflow_contract
+from bami.workflows import validate_observation
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def _toy_simulator(theta, n_trials, rng):
-    """Return a tiny subject row for contract tests.
-
-    Parameters
-    ----------
-    theta
-        Public toy parameter.
-    n_trials
-        Number of simulated trials.
-    rng
-        Random generator accepted for API compatibility.
-
-    Returns
-    -------
-    list[int]
-        One simple data row.
-    """
-
-    return [theta, n_trials]
-
-
-def test_valid_training_contract_passes():
-    """Workflow fitting and group recovery should accept required fields."""
-
-    contract = {
-        "name": "demo",
-        "param_names": ["theta"],
-        "priors": {"theta": {"mean": 0.0, "sd": 1.0, "link": "identity"}},
-        "simulator": _toy_simulator,
-        "data_width": 1,
-    }
-
-    out = validate_workflow_contract(contract)
-
-    assert out["name"] == "demo"
-    assert out["param_names"] == ["theta"]
-    assert out["data_width"] == 1
-
-
-def test_contract_validation_reports_missing_fields():
-    """Missing required fields should produce a readable error."""
-
-    with pytest.raises(ValueError, match="missing required fields"):
-        validate_workflow_contract({"name": "demo"})
-
-
-def test_contract_validation_rejects_bad_callables():
-    """Simulator and likelihood fields should be real callables."""
-
-    contract = {
-        "name": "demo",
-        "param_names": ["theta"],
-        "priors": {},
-        "simulator": "not a function",
-        "data_width": 1,
-    }
-
-    with pytest.raises(ValueError, match="simulator"):
-        validate_workflow_contract(contract)
 
 
 def test_observation_validation_accepts_public_contracts():

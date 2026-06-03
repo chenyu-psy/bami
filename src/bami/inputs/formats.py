@@ -3,7 +3,8 @@
 These helpers make trial-count encoding explicit for workflows whose input
 rows lose reliability information, such as aggregate summaries or proportions.
 Most users should create formats with ``aggregate_summary()``, ``proportions()``,
-or ``counts()`` instead of constructing ``InputFormat`` directly.
+``counts()``, or ``counts_as_proportions()`` instead of constructing
+``InputFormat`` directly.
 """
 
 from __future__ import annotations
@@ -13,8 +14,10 @@ from typing import Literal
 
 import numpy as np
 
-InputKind = Literal["aggregate_summary", "proportions", "counts"]
-NTransform = Literal["log_range", "linear_range"]
+InputKind = Literal[
+    "aggregate_summary", "proportions", "counts", "counts_as_proportions"
+]
+NTransform = Literal["log_range", "linear_range", "divide_by_high_minus_one"]
 
 
 @dataclass(frozen=True)
@@ -23,22 +26,27 @@ class InputFormat:
 
     Use this object when a simulator row does not by itself show how many
     trials produced the row. Most user code should create one with
-    ``aggregate_summary()``, ``proportions()``, or ``counts()``.
+    ``aggregate_summary()``, ``proportions()``, ``counts()``, or
+    ``counts_as_proportions()``.
 
     Args:
         kind: Named input preset. Supported values are
-            ``"aggregate_summary"``, ``"proportions"``, and ``"counts"``.
+            ``"aggregate_summary"``, ``"proportions"``, ``"counts"``, and
+            ``"counts_as_proportions"``.
         add_n: Whether encoded rows append a trial-count feature.
         n_range: Two-value range used to scale trial counts when ``add_n`` is
             true.
         n_transform: Named transform used for the appended trial-count
             feature.
+        keep_raw_as: Optional simulation-output key used to retain the raw
+            simulator row before input formatting.
     """
 
     kind: InputKind
     add_n: bool
     n_range: tuple[int, int] | None = None
     n_transform: NTransform = "log_range"
+    keep_raw_as: str | None = None
 
     def __post_init__(self) -> None:
         """Validate format fields after dataclass initialization.
@@ -47,10 +55,21 @@ class InputFormat:
             None: Raises ``ValueError`` when the format is internally inconsistent.
         """
 
-        if self.kind not in {"aggregate_summary", "proportions", "counts"}:
+        if self.kind not in {
+            "aggregate_summary",
+            "proportions",
+            "counts",
+            "counts_as_proportions",
+        }:
             raise ValueError(f"Unsupported input kind: {self.kind!r}.")
-        if self.n_transform not in {"log_range", "linear_range"}:
+        if self.n_transform not in {
+            "log_range",
+            "linear_range",
+            "divide_by_high_minus_one",
+        }:
             raise ValueError(f"Unsupported n_transform: {self.n_transform!r}.")
+        if self.keep_raw_as is not None and not self.keep_raw_as:
+            raise ValueError("keep_raw_as must be a non-empty string or None.")
         if self.add_n:
             self._check_n_range(self.n_range)
         if not self.add_n and self.n_range is not None:
@@ -83,6 +102,10 @@ class InputFormat:
         """
 
         row_arr = np.asarray(row, dtype=np.float32).reshape(-1)
+        if self.kind == "counts_as_proportions":
+            if n_trials < 1:
+                raise ValueError("n_trials must be at least 1.")
+            row_arr = row_arr / float(n_trials)
         if not self.add_n:
             return row_arr
         n_value = np.array([self.transform_n(n_trials)], dtype=np.float32)
@@ -108,6 +131,8 @@ class InputFormat:
             )
         if self.n_transform == "linear_range":
             return self._scale_to_unit_interval(n_value, low, high)
+        if self.n_transform == "divide_by_high_minus_one":
+            return float(n_value / float(high - 1))
 
         log_low = np.log(low)
         log_high = np.log(high)
@@ -126,6 +151,7 @@ class InputFormat:
             "add_n": self.add_n,
             "n_range": None if self.n_range is None else list(self.n_range),
             "n_transform": self.n_transform,
+            "keep_raw_as": self.keep_raw_as,
         }
 
     @staticmethod
@@ -247,4 +273,36 @@ def counts(
         add_n=add_n,
         n_range=n_range,
         n_transform=n_transform,
+    )
+
+
+def counts_as_proportions(
+    n_range: tuple[int, int],
+    keep_raw_as: str | None = None,
+    n_transform: NTransform = "divide_by_high_minus_one",
+) -> InputFormat:
+    """Create an input format that trains on proportions from count rows.
+
+    Use this when a simulator naturally returns category counts but the model
+    should see response proportions plus an explicit trial-count feature. The
+    optional ``keep_raw_as`` key preserves the original count rows in simulated
+    output for diagnostics.
+
+    Args:
+        n_range: Trial-count range used to scale the appended trial-count
+            feature.
+        keep_raw_as: Optional output key for unformatted count rows.
+        n_transform: Named transform for the appended trial-count feature.
+
+    Returns:
+        InputFormat: Format that converts counts to proportions and appends
+            encoded ``n_trials``.
+    """
+
+    return InputFormat(
+        kind="counts_as_proportions",
+        add_n=True,
+        n_range=n_range,
+        n_transform=n_transform,
+        keep_raw_as=keep_raw_as,
     )

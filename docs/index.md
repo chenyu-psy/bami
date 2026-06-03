@@ -43,106 +43,116 @@ With `pip`:
 pip install "bami @ git+https://github.com/chenyu-psy/bami.git"
 ```
 
-## Usage
+## A minimal workflow
 
-A typical `bami` analysis follows the same data flow:
-
-1. Write or choose a simulator that turns model parameters into data.
-2. Describe priors for the parameters.
-3. Build a `SimpleWorkflow` or `HierarchicalWorkflow`.
-4. Train the workflow or load saved weights.
-5. Sample from the posterior.
-6. Check recovery and diagnostics.
-
-The examples in this site focus on the first three steps so the workflow shape
-is easy to inspect before starting longer training runs.
+This small SDM example shows the usual package flow: build a workflow, simulate
+validation data, train or load the workflow, sample from the posterior, and run
+a recovery diagnostic.
 
 ```python
+import numpy as np
+
 from bami.simulators import simulate_sdm_simple
 from bami.workflows import SimpleWorkflow
 
+
+np.random.seed(2026)
 
 model = SimpleWorkflow(
     name="SDM",
     param_names=["c", "kappa"],
     priors={
-        "c": {"mean": "normal(1, 0.35)", "sd": 0.15, "link": "log"},
-        "kappa": {"mean": "normal(1.2, 0.35)", "sd": 0.15, "link": "log"},
+        "c": {"mean": "normal(4, 1.2)", "sd": 0.5, "link": "softplus"},
+        "kappa": {"mean": "normal(4, 1.2)", "sd": 0.5, "link": "softplus"},
     },
     simulator=simulate_sdm_simple,
     observation="trial",
     obs_names=["error"],
-    n_trials=25,
+    n_trials=40,
 )
 
-sim = model.simulate(4)
-print(sim["data"].shape)
+validation_data = model.simulate(64)
+
+model.train_workflow(
+    max_epochs=20,
+    initial_epochs=5,
+    n_batch=50,
+    batch_size=64,
+    validation_data=validation_data,
+    file="saved_workflows/sdm_simple.keras",
+)
+
+test_data = model.simulate(20)
+samples = model.sample_posterior(test_data, num_samples=200)
+
+fig = model.plot_parameter_recovery(
+    n_datasets=20,
+    num_samples=200,
+    metrics=["corr", "ccc"],
+)
 ```
 
-## Main concepts
+These settings are intentionally small so the workflow shape is easy to check.
+For a real analysis, increase the training and recovery settings after
+confirming that the model simulates, trains, samples, and produces diagnostics
+on your machine.
+
+## Core ideas
+
+### Workflows
+
+A workflow is the analysis setup for one simulator-based model. It tells
+`bami` which parameters to estimate, how to simulate training data, how to train
+the model, and how to check the fitted model.
+
+Use `SimpleWorkflow` when each simulated dataset has one set of model
+parameters to estimate. Use `HierarchicalWorkflow` when the data come from a
+group or study and you want population-level parameter estimates, with optional
+subject-level estimates after the group model is trained.
+
+The same simulator can often be used in both workflows. The workflow changes
+the parameter structure and the inference target, not necessarily the
+simulator. See [Choose the right workflow structure](articles/advanced-workflows.md)
+for guidance on simple, flexible, and hierarchical workflows, and the
+[workflow reference](api/workflows.md) for exact arguments.
 
 ### Simulators
 
-A simulator is a regular Python function. For simple workflows, it receives
-model parameters, `n_trials`, and `rng`, then returns simulated data. For
-hierarchical workflows, `bami` calls the same kind of simulator once per
-subject.
+A simulator is the bridge between a psychological model and `bami`. It is a
+regular Python function that receives model parameter values and `n_trials`,
+then returns simulated behavioral data.
+
+The built-in simulator pages document examples shipped with `bami`; they are
+not the only simulators you can use. You can write your own simulator or wrap a
+simulator from another package. See
+[Write a simulator for your own model](articles/simulators.md) for a
+step-by-step guide.
 
 ### Priors
 
-Priors use a compact dictionary format:
+Priors define the range of parameter values that `bami` learns from during
+simulation and training. They also determine the range of behavioral patterns
+the workflow sees before it is used on real or held-out data.
 
-```python
-priors = {
-    "a": {"mean": 0.0, "sd": 1.0, "link": "identity"},
-    "c": {"mean": "normal(0, 1)", "sd": "exponential(1)", "link": "identity"},
-}
-```
+In the minimal workflow above, `c` and `kappa` are estimated parameters because
+their prior entries are dictionaries. Scalar entries are treated as fixed
+simulator settings and passed to the simulator without being estimated. See
+[Choose priors and links for model parameters](articles/priors.md) for prior
+dictionaries, distribution strings, and link functions; the
+[workflow reference](api/workflows.md) gives the exact constructor details.
 
-Dictionary-valued parameters are inferred. Scalar values are treated as fixed
-constants and passed to the simulator.
+### Observation shape
 
-### Observation contracts
+The `observation` argument tells `bami` what kind of behavioral data your
+simulator returns.
 
-The `observation` argument makes the data shape explicit:
+- `observation="aggregate"` means the data have already been summarized. For
+  example, each simulated subject might contribute one row with summary values
+  such as a mean response, a response standard deviation, or an accuracy/rate.
+- `observation="trial"` means the data are still at the trial level. For
+  example, each row might be one trial's response, RT, error, or other measured
+  outcome.
 
-- `observation="aggregate"` means one fixed-width summary row per dataset or subject.
-- `observation="trial"` means one row per trial.
-
-This distinction matters because BayesFlow uses different summary-network
-behavior for fixed rows and exchangeable trial sets.
-
-### Fixed and flexible designs
-
-Use `n_trials` for fixed trial counts:
-
-```python
-model = SimpleWorkflow(..., n_trials=100)
-```
-
-Use `n_trials_range` when simulated datasets should vary in trial count:
-
-```python
-model = SimpleWorkflow(..., n_trials=None, n_trials_range=(50, 201))
-```
-
-The upper bound is exclusive, so this example draws 50 to 200 trials.
-
-## Main modules
-
-- `bami.workflows`: `SimpleWorkflow` and `HierarchicalWorkflow`.
-- `bami.inputs`: input-format helpers for aggregate rows that encode trial count.
-- `bami.simulators`: reusable simulator helpers for SDM, ezDM, M3, and circular data.
-- `bami.inference`: priors, transforms, saved workflows, runtime settings, and posterior helpers.
-- `bami.evaluation`: dataframe-first recovery metrics and summary helpers.
-
-## Learning bami
-
-Start with one of the complete workflow examples, then use the API reference
-when you need the exact arguments for a function or workflow.
-
-<div class="bami-link-list">
-  <a href="examples/simple-sdm/">Simple SDM workflow</a>
-  <a href="examples/hierarchical-ezdm/">Hierarchical ezDM workflow</a>
-  <a href="api/workflows/">Workflow reference</a>
-</div>
+Use the form that matches the data produced by your simulator and the data you
+plan to analyze. The [workflow reference](api/workflows.md) gives the exact
+array shapes and trial-count options.

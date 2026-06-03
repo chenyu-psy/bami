@@ -12,8 +12,13 @@ Start here when building a BayesFlow workflow around a simulator.
 
 ## Simulators
 
-Use these functions to simulate cognitive-model summaries or trial rows for
-workflows. Model-specific helpers are documented on each simulator page.
+A simulator is a function that converts model parameters into simulated
+behavioral performance or observation rows for a workflow. The pages below
+document only the built-in simulators shipped with `bami`.
+
+You can also write your own simulator. See the
+[simulators article](../articles/simulators.md) for a step-by-step custom ezDM
+example.
 
 [`simulate_sdm_simple`](simulators/sdm-circular.md)
 : Simulate trial-level circular errors for a standard SDM workflow.
@@ -24,14 +29,16 @@ workflows. Model-specific helpers are documented on each simulator page.
 [`simulate_m3_custom`](simulators/m3.md)
 : Simulate response-count vectors for M3 workflows.
 
-## Parameters
+## Utils
 
-Use these functions after training when you want population-level or
-individual-level parameter estimates.
+Use these functions to reshape workflow outputs into analysis-ready tables.
 
-[`SimpleWorkflow.sample_posterior`, `HierarchicalWorkflow.sample_group_posterior`, `HierarchicalWorkflow.train_random_estimator`, and `HierarchicalWorkflow.estimate_random_parameter`](parameters.md)
-: Sample simple and group-level posterior draws, then train and apply the
-subject-level random-effect estimator when individual estimates are needed.
+[`posterior_to_dataframe`](utils.md)
+: Convert posterior sample dictionaries into tidy dataframes for summaries,
+plotting, or export.
+
+[`aggregate_data`](utils.md)
+: Aggregate one or more numeric columns by optional grouping columns.
 
 ## Evaluation
 
@@ -42,9 +49,6 @@ Use these functions to check recovery and model performance.
 
 [`estimate_recovery`](evaluation/metrics.md)
 : Compute grouped recovery metrics from simulated and estimated value tables.
-
-[`aggregate_data`](evaluation/metrics.md)
-: Aggregate one or more numeric columns by optional grouping columns.
 
 [`plot_parameter_recovery`, `plot_population_recovery`, and `plot_random_recovery`](evaluation/diagnostics.md)
 : Plot model-level recovery diagnostics for one fitted workflow.

@@ -53,13 +53,6 @@ def posterior_to_dataframe(
     Returns:
         pandas.DataFrame: Tidy posterior table with columns ``dataset``,
             ``draw``, ``level``, ``param``, ``basis``, ``quantity``, and ``value``.
-
-    Example:
-        ```python
-        samples = {"theta": np.array([[0.1, 0.2]])}
-        priors = {"theta": {"mean": 0, "sd": 1, "link": "identity"}}
-        posterior_to_dataframe(samples, priors, level="simple")
-        ```
     """
 
     checked_level = _check_level(level)
